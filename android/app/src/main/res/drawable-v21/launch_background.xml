@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Écran de lancement natif, API 21-22 : aplat de la couleur de marque.
+     La version avec logo centré est dans res/drawable-v23/. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/citycare_splash_background" />
+</layer-list>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Écran de lancement natif : fond de marque + logo CityCare centré.
+     Le logo est un VectorDrawable, donc net sur toutes les densités et sans
+     aucun fichier image binaire dans le dépôt. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/citycare_splash_background" />
+    <item
+        android:drawable="@drawable/citycare_splash_logo"
+        android:gravity="center"
+        android:width="120dp"
+        android:height="120dp" />
+</layer-list>

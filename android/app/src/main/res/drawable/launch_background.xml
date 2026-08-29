@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Écran de lancement natif (avant que Flutter ne dessine sa première image).
+     Repli pour les anciennes API : aplat de la couleur de marque, sans logo,
+     car le centrage d'un calque n'est fiable qu'à partir de l'API 23.
+     La version avec logo est dans res/drawable-v23/. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/citycare_splash_background" />
+</layer-list>

@@ -1,0 +1,137 @@
+# ==========================================================================
+# CityCare — .gitignore racine
+# Fusion des règles Flutter/Dart, Android, iOS, Python (backend/) et secrets.
+# ==========================================================================
+
+# --------------------------------------------------------------------------
+# Divers
+# --------------------------------------------------------------------------
+*.class
+*.log
+*.swp
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# --------------------------------------------------------------------------
+# IDE / éditeurs
+# --------------------------------------------------------------------------
+*.iml
+*.ipr
+*.iws
+.idea/
+# Le dossier .vscode contient des configurations de lancement que l'on peut
+# vouloir versionner ; il est volontairement laissé décommenté ici.
+#.vscode/
+
+# --------------------------------------------------------------------------
+# Flutter / Dart / Pub
+# --------------------------------------------------------------------------
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+**/build/
+/coverage/
+.widget_preview/
+
+# Symbolication
+app.*.symbols
+
+# Obfuscation
+app.*.map.json
+
+# --------------------------------------------------------------------------
+# Android
+# --------------------------------------------------------------------------
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/.cxx/
+android/**/GeneratedPluginRegistrant.java
+/android/app/debug
+/android/app/profile
+/android/app/release
+*.keystore
+*.jks
+android/key.properties
+
+# --------------------------------------------------------------------------
+# iOS / macOS
+# --------------------------------------------------------------------------
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.*
+**/DerivedData/
+**/xcuserdata/
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+
+# --------------------------------------------------------------------------
+# Python / backend
+# --------------------------------------------------------------------------
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --------------------------------------------------------------------------
+# Bases de données locales
+# --------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# --------------------------------------------------------------------------
+# SECRETS — ne jamais versionner
+# La clé Google Maps vit dans android/secrets.properties ;
+# le modèle documenté est android/secrets.properties.example.
+# --------------------------------------------------------------------------
+.env
+*.env
+!*.env.example
+.env.*
+!.env.example
+android/secrets.properties
+ios/Flutter/Secrets.xcconfig
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+backend/.env
+backend/.demo_kit.json
+backend/.kit_offline_queue.json
+backend/fcm-service-account.json
+*service-account*.json
+*-service-account.json
+id_rsa
+id_rsa.pub
+*.pem
+*.p12

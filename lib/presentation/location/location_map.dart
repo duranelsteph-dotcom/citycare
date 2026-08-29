@@ -1,0 +1,137 @@
+import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../../app/brand.dart';
+import '../../core/config/maps_config.dart';
+import 'maps/google_map_view.dart';
+import 'maps/map_data.dart';
+import 'maps/osm_map_view.dart';
+
+export 'maps/map_data.dart' show MapCircle, MapPin, MapViewModel, kDefaultMapCenter, trajectorySegments;
+
+/// Carte de CityCare, indépendante du fournisseur.
+///
+/// L'écran appelant ne choisit pas la carte : il décrit ce qu'il veut montrer
+/// (position, zones, trajectoire, témoignages) et [LocationMapView] sélectionne
+/// Google Maps si la clé d'API est configurée, sinon OpenStreetMap.
+///
+/// Conséquence voulue : l'absence de clé ne casse jamais une démonstration, et
+/// l'utilisateur est informé de la carte réellement affichée.
+class LocationMapView extends StatelessWidget {
+  const LocationMapView({
+    super.key,
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.isStale = false,
+    this.isUnsynced = false,
+    this.circles = const [],
+    this.pathSegments = const [],
+    this.pins = const [],
+    this.onTap,
+  });
+
+  final double? latitude;
+  final double? longitude;
+  final double? accuracyMeters;
+  final bool isStale;
+  final bool isUnsynced;
+  final List<MapCircle> circles;
+  final List<List<LatLng>> pathSegments;
+  final List<MapPin> pins;
+  final void Function(double latitude, double longitude)? onTap;
+
+  bool get hasPoint => latitude != null && longitude != null;
+
+  @override
+  Widget build(BuildContext context) {
+    final model = MapViewModel(
+      latitude: latitude,
+      longitude: longitude,
+      accuracyMeters: accuracyMeters,
+      isStale: isStale,
+      isUnsynced: isUnsynced,
+      circles: circles,
+      pathSegments: pathSegments,
+      pins: pins,
+    );
+    final reason = MapsConfig.fallbackReason;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: MapsConfig.provider == MapProvider.google
+              ? GoogleMapsView(model: model, onTap: onTap)
+              : OsmMapView(model: model, onTap: onTap),
+        ),
+        if (reason != null)
+          Positioned(
+            top: CityCareBrand.spaceSm,
+            left: CityCareBrand.spaceSm,
+            child: _MapProviderNotice(reason: reason),
+          ),
+      ],
+    );
+  }
+}
+
+/// Pastille discrète indiquant quelle carte est réellement affichée.
+///
+/// Volontairement petite : elle informe sans masquer la carte, et le détail
+/// (comment configurer la clé) est disponible au toucher.
+class _MapProviderNotice extends StatelessWidget {
+  const _MapProviderNotice({required this.reason});
+
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface.withValues(alpha: 0.92),
+      borderRadius: CityCareBrand.borderRadiusSm,
+      elevation: 2,
+      child: InkWell(
+        borderRadius: CityCareBrand.borderRadiusSm,
+        onTap: () => _showDetail(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.layers_outlined, size: 16, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(
+                'Carte OpenStreetMap',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.info_outline, size: 14, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetail(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.layers_outlined),
+        title: const Text('Fournisseur de carte'),
+        content: Text(reason),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('J’ai compris'),
+          ),
+        ],
+      ),
+    );
+  }
+}

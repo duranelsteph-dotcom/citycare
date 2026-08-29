@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Variante nocturne de l'écran de lancement : même symbole, fond sombre,
+     pour ne pas éblouir lors d'une recherche de nuit. -->
+<resources>
+    <color name="citycare_splash_background">#0B2B6B</color>
+    <color name="citycare_splash_mark">#FFFFFF</color>
+    <color name="citycare_splash_accent">#5FD6C7</color>
+</resources>

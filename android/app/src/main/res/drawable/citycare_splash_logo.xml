@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo CityCare en vectoriel natif (VectorDrawable, aucun bitmap).
+     Même construction que lib/presentation/widgets/citycare_logo.dart :
+     un bouclier blanc contenant une balise de localisation évidée d'un cœur. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Bouclier -->
+    <path
+        android:fillColor="@color/citycare_splash_mark"
+        android:pathData="M54,10.8 L92.34,25.38 Q94.5,26.46 94.5,29.16 L94.5,56.16 C94.5,79.38 78.3,93.42 54,100.98 C29.7,93.42 13.5,79.38 13.5,56.16 L13.5,29.16 Q13.5,26.46 15.66,25.38 Z" />
+
+    <!-- Balise de localisation, évidée d'un cœur (règle evenOdd) -->
+    <path
+        android:fillColor="@color/citycare_splash_background"
+        android:fillType="evenOdd"
+        android:pathData="M35.1,48.06 A18.9,18.9 0 0 1 72.9,48.06 Q70.4,69.8 54,83.7 Q37.6,69.8 35.1,48.06 Z M54,54.53 C43.62,45.83 48.31,37.12 54,43.48 C59.69,37.12 64.38,45.83 54,54.53 Z" />
+</vector>

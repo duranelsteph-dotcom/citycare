@@ -1,0 +1,5 @@
+#include "Generated.xcconfig"
+// Inclusion optionnelle (`#include?`) : si Secrets.xcconfig n'existe pas, la
+// compilation continue et l'application bascule sur la carte OpenStreetMap.
+// Voir ios/Flutter/Secrets.xcconfig.example.
+#include? "Secrets.xcconfig"
