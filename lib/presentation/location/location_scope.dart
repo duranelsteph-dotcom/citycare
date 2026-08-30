@@ -14,4 +14,9 @@ class LocationScope extends InheritedNotifier<LocationController> {
     assert(scope != null, 'LocationScope introuvable');
     return scope!.notifier!;
   }
+
+  /// Absent hors du shell (tests de pages isolées).
+  static LocationController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<LocationScope>()?.notifier;
+  }
 }

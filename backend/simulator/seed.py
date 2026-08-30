@@ -45,17 +45,66 @@ def _auth(session: dict) -> dict:
     return {"Authorization": f"Bearer {session['access_token']}"}
 
 
+def _complete_login(http, body: dict) -> dict:
+    """Après le mot de passe, valide l'OTP (otp_dev en développement seulement)."""
+    if body.get("access_token"):
+        return body
+    otp = body.get("otp_dev")
+    if not otp:
+        raise RuntimeError("Login 2FA sans otp_dev — aucun SMS n'est envoyé, le seed exige le mode développement")
+    verified = http.post(
+        "/api/v1/auth/verify-otp",
+        json={"challenge_id": body["challenge_id"], "code": otp},
+    )
+    if verified.status_code != 200:
+        raise RuntimeError(verified.text)
+    return verified.json()
+
+
+def _insert_legacy_demo_user(payload: dict) -> None:
+    """Crée le compte seed avec motdepasse, hors règle d’inscription forte."""
+    from app.core.enums import UserRole
+    from app.core.security import hash_password
+    from app.db.session import SessionLocal
+    from app.models.people import YoungPerson
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.phone == payload["phone"]).one_or_none()
+        if existing is not None:
+            return
+        role = UserRole(payload["role"])
+        user = User(
+            full_name=payload["full_name"],
+            phone=payload["phone"],
+            password_hash=hash_password(payload["password"]),
+            role=role,
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+        if role == UserRole.YOUNG:
+            db.add(YoungPerson(user_id=user.id, display_name=payload["full_name"]))
+        db.commit()
+    finally:
+        db.close()
+
+
 def register_or_login(http, payload: dict) -> dict:
     login = http.post("/api/v1/auth/login", json={"phone": payload["phone"], "password": payload["password"]})
     if login.status_code == 200:
-        return login.json()
+        return _complete_login(http, login.json())
     created = http.post("/api/v1/auth/register", json=payload)
     if created.status_code == 200:
         return created.json()
+    # Comptes seed historiques : motdepasse (grandfather). L’inscription
+    # publique exige désormais un mot de passe fort.
+    _insert_legacy_demo_user(payload)
     login = http.post("/api/v1/auth/login", json={"phone": payload["phone"], "password": payload["password"]})
     if login.status_code != 200:
         raise RuntimeError(f"Compte {payload['phone']} : {created.text} / {login.text}")
-    return login.json()
+    return _complete_login(http, login.json())
 
 
 def _pair(http, young: dict, guardian: dict) -> dict:
@@ -96,12 +145,12 @@ def _ensure_risk_zone(http, parent: dict, payload: dict) -> None:
 
 
 def _ensure_relative_trigger(http, young: dict, link: dict) -> dict:
-    if link.get("can_trigger_alert"):
+    if link.get("can_trigger_alert") and link.get("can_report_missing"):
         return link
     patched = http.patch(
         f"/api/v1/family/links/{link['id']}/permissions",
         headers=_auth(young),
-        json={"can_trigger_alert": True},
+        json={"can_trigger_alert": True, "can_report_missing": True},
     )
     if patched.status_code != 200:
         raise RuntimeError(patched.text)
@@ -124,6 +173,25 @@ def _ensure_share(http, young: dict, parent: dict) -> dict | None:
     if created.status_code != 200:
         raise RuntimeError(created.text)
     return created.json()
+
+
+def _ensure_demo_circle(http, parent: dict, young: dict, relative: dict) -> dict:
+    """Cercle « Famille Demo » : grouping des comptes seed, sans toucher aux GuardianLink."""
+    listed = http.get("/api/v1/circles", headers=_auth(parent))
+    if listed.status_code >= 300:
+        raise RuntimeError(listed.text)
+    circle = next((item for item in listed.json() if item["name"] == "Famille Demo"), None)
+    if circle is None:
+        created = http.post("/api/v1/circles", headers=_auth(parent), json={"name": "Famille Demo"})
+        if created.status_code != 200:
+            raise RuntimeError(created.text)
+        circle = created.json()
+    code = circle["invite_code"]
+    for session in (young, relative):
+        joined = http.post("/api/v1/circles/join", headers=_auth(session), json={"code": code})
+        if joined.status_code != 200:
+            raise RuntimeError(joined.text)
+    return circle
 
 
 def _ensure_kit(http, young: dict) -> dict:
@@ -255,6 +323,7 @@ def seed_demo(http, *, play: bool = False) -> dict:
     _ensure_zone(http, parent, young_id, HOME_ZONE)
     _ensure_risk_zone(http, parent, MARKET_RISK)
     share = _ensure_share(http, young, parent)
+    circle = _ensure_demo_circle(http, parent, young, relative)
     kit = _ensure_kit(http, young)
     search = None
     kit_played = False
@@ -276,6 +345,7 @@ def seed_demo(http, *, play: bool = False) -> dict:
         "can_view_location": parent_link.get("can_view_location"),
         "can_trigger_alert": relative_link.get("can_trigger_alert"),
         "share": share,
+        "circle": circle,
         "search": search,
         "kit_played": kit_played,
     }
@@ -291,7 +361,13 @@ def print_summary(result: dict) -> None:
     print(f"  Autorité {AUTHORITY['phone']}  {AUTHORITY['full_name']}")
     print("Le parent n'a pas la position en direct (can_view_location=false). Un SOS n'est pas un kidnapping confirmé.")
     print("Amina partage sa dernière position connue 8 h avec Marie (révocable). Pas un GPS continu.")
-    print("Marc (proche) peut déclencher un SOS. Un SOS n'est pas un kidnapping confirmé.")
+    print("Marc (proche) peut déclencher un SOS et déclarer un avis de recherche.")
+    print("Un SOS n'est pas un kidnapping confirmé.")
+    circle = result.get("circle") or {}
+    print(
+        f"Cercle « Famille Demo » (code {circle.get('invite_code', '—')}) : grouping des comptes, "
+        "sans remplacer GuardianLink."
+    )
     print("Zone à risque démo : Carrefour du marché (18h–23h). Signal, pas un kidnapping confirmé.")
     print(f"Kit uid={kit['device_uid']}")
     search = result.get("search")

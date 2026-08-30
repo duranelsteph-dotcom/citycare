@@ -94,6 +94,8 @@ def _active_link(db: Session, user: User, young_person_id: UUID) -> GuardianLink
 
 
 def _can_view(db: Session, user: User, young_person_id: UUID) -> None:
+    if user.role == UserRole.AUTHORITY:
+        return
     if user.role == UserRole.YOUNG:
         young = require_young(user)
         if young.id != young_person_id:
@@ -329,9 +331,18 @@ def list_own(db: Session, user: User) -> list[MissingPersonCaseRead]:
     return [to_read(row) for row in rows]
 
 
+def list_for_authority(db: Session, user: User) -> list[MissingPersonCaseRead]:
+    if user.role != UserRole.AUTHORITY:
+        raise CaseError("Réservé à l’autorité", 403)
+    rows = _query(db).order_by(MissingPersonCase.created_at.desc()).limit(100).all()
+    return [to_read(row) for row in rows]
+
+
 def list_for_guardian(db: Session, user: User) -> list[MissingPersonCaseRead]:
+    if user.role == UserRole.AUTHORITY:
+        return list_for_authority(db, user)
     if user.role not in {UserRole.PARENT, UserRole.RELATIVE}:
-        raise CaseError("Réservé au parent ou au proche autorisé", 403)
+        raise CaseError("Réservé au parent, au proche ou à l’autorité", 403)
     young_ids = [
         link.young_person_id
         for link in db.query(GuardianLink)
@@ -369,7 +380,7 @@ def set_status(db: Session, user: User, case_id: UUID, status: CaseStatus) -> Mi
             raise CaseError("Vous ne pouvez modifier que votre propre dossier", 403)
         if status != CaseStatus.FOUND:
             raise CaseError("Le jeune peut indiquer qu'il est en sécurité", 403)
-    else:
+    elif user.role != UserRole.AUTHORITY:
         _can_report(db, user, row.young_person_id)
     if row.status in TERMINAL_CASE and status != row.status:
         raise CaseError("Ce dossier est déjà clos", 409)

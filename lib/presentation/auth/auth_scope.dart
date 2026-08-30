@@ -14,4 +14,9 @@ class AuthScope extends InheritedNotifier<AuthController> {
     assert(scope != null, 'AuthScope introuvable');
     return scope!.notifier!;
   }
+
+  /// Absent hors du shell (tests de pages isolées).
+  static AuthController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<AuthScope>()?.notifier;
+  }
 }

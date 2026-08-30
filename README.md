@@ -82,11 +82,41 @@ Le parcours d'autorisation est géré de bout en bout par
 
 Le bandeau se rafraîchit automatiquement au retour des réglages.
 
+## File hors ligne (Phase 13)
+
+Les positions et SOS capturés hors ligne restent dans `OfflineQueue`
+(horodatage téléphone conservé, pas Last Write Wins, aucun GPS inventé).
+
+Le flush est le même partout :
+
+- à l’ouverture de l’app et au retour réseau (premier plan) ;
+- bouton « Réessayer » du bandeau (file non vide ≠ « synchronisé ») ;
+- **Android** : tâche WorkManager périodique (~15 min, minimum OS) si la file
+  n’est pas vide **et** qu’un jeton existe. Sinon no-op.
+
+Ce n’est **pas** une garantie de 15 minutes : Doze, batterie et skins OEM
+(Xiaomi, Huawei, Samsung, …) peuvent retarder, grouper ou supprimer le travail
+en arrière-plan.
+
+**iOS** : Workmanager s’appuie sur BGTaskScheduler / Background Fetch. iOS
+décide du moment (souvent ~1×/jour selon l’usage). CityCare n’enregistre pas
+de tâche périodique iOS ; le flush reste au premier plan.
+
 ## URL du backend
+
+En **production** (HTTPS) :
 
 ```bash
 flutter run --dart-define=CITYCARE_API_URL=https://exemple/api/v1
 ```
+
+En **développement** sur un téléphone physique, ne pas utiliser `127.0.0.1`
+(c’est le téléphone, pas le PC). L’app prend l’IPv4 LAN de
+`lib/app/dev_api_host.dart` (mettre à jour après `ipconfig` si le Wi‑Fi change).
+`--dart-define=CITYCARE_API_URL=http://IP_LAN:8000/api/v1` reste un override.
+Émulateur Android : `http://10.0.2.2:8000/api/v1`. Backend : `python -m app.run_api`
+écoute `0.0.0.0:8000`. Autoriser TCP 8000 dans le pare-feu Windows.
+`adb reverse tcp:8000 tcp:8000` est un bonus USB, pas la solution définitive.
 
 ## Vérifications
 

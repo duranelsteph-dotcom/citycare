@@ -2,18 +2,31 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- Phase 12 : GPS arrière-plan opt-in (Android 10+). SOS, zones, proches autorisés. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Photo de profil : appareil photo. La galerie moderne (Photo Picker) n’exige pas de lecture stockage. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <!-- La carte et les tuiles ont besoin de connaître l'état du réseau pour
          se dégrader proprement hors ligne. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Phase 13 : WorkManager redémarre la tâche périodique après reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Le GPS n'est pas obligatoire : sans lui, CityCare reste utilisable
          (kit IoT, alertes, dossiers) avec une position moins précise. -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
     <application
         android:label="CityCare"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <!-- Clé Google Maps injectée par Gradle depuis android/secrets.properties.
              Voir android/secrets.properties.example. Aucune clé n'est versionnée. -->
         <meta-data
@@ -41,6 +54,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Service premier plan geolocator : notification « CityCare partage ta position ». -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -59,6 +78,17 @@
         </intent>
         <intent>
             <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <!-- Menu de partage natif (share_plus) : SMS, WhatsApp, etc. -->
+        <intent>
+            <action android:name="android.intent.action.SEND"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT"/>
         </intent>
     </queries>
 </manifest>

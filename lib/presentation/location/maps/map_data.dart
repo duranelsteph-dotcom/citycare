@@ -3,6 +3,8 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../app/brand.dart';
 import '../../../domain/entities/search.dart';
+import '../../map/care_status.dart';
+import '../../map/freshness.dart';
 
 /// Centre par défaut (Yaoundé) lorsqu’aucune position n’est connue.
 const LatLng kDefaultMapCenter = LatLng(3.8480, 11.5021);
@@ -37,13 +39,63 @@ class MapPin {
     required this.latitude,
     required this.longitude,
     this.isTestimony = false,
+    this.label,
+    this.id,
+    this.isSelected = false,
+    this.isStale = false,
+    this.ageSeconds = 0,
+    this.photoUrl,
+    this.batteryCaption,
+    this.careLevel,
   });
 
   final double latitude;
   final double longitude;
   final bool isTestimony;
 
+  /// Libellé optionnel (prénom du jeune sur la carte famille).
+  final String? label;
+
+  /// Identifiant du membre (recentrage depuis le panneau).
+  final String? id;
+
+  /// Pastille mise en avant après un tap dans le sheet.
+  final bool isSelected;
+
+  /// Position ancienne : ne pas la styler comme un GPS actuel.
+  final bool isStale;
+
+  /// Âge du point, pour la bulle de fraîcheur (mêmes règles que le sheet).
+  final int ageSeconds;
+
+  /// Photo de profil si le backend l’a déjà (Phase 10). Pas une image inventée.
+  final String? photoUrl;
+
+  /// Batterie déjà connue (téléphone ou kit). Jamais un 100 % inventé.
+  final String? batteryCaption;
+
+  /// Statut unifié Phase 18. Null = dérivé de la fraîcheur (stale → Attention).
+  final CareLevel? careLevel;
+
   LatLng get point => LatLng(latitude, longitude);
+
+  CareLevel get resolvedCareLevel {
+    if (careLevel != null) {
+      return careLevel!;
+    }
+    return looksStale ? CareLevel.attention : CareLevel.secure;
+  }
+
+  /// Libellé pin : « Position récente », jamais « en sécurité ».
+  String get careCaption => careShortLabel(resolvedCareLevel);
+
+  /// Stale déclaré ou âge au-delà du seuil backend (~5 min).
+  bool get looksStale =>
+      isTestimony ? false : locationLooksStale(isStale: isStale, ageSeconds: ageSeconds);
+
+  /// Texte de fraîcheur de la bulle — jamais « temps réel ».
+  String get freshnessCaption =>
+      locationFreshnessLabel(isStale: isStale, ageSeconds: ageSeconds);
 }
 
 /// Données communes aux deux implémentations de carte (Google et OpenStreetMap).
@@ -60,6 +112,10 @@ class MapViewModel {
     this.circles = const [],
     this.pathSegments = const [],
     this.pins = const [],
+    this.focusLatitude,
+    this.focusLongitude,
+    this.focusGeneration = 0,
+    this.careLevel,
   });
 
   final double? latitude;
@@ -70,6 +126,17 @@ class MapViewModel {
   final List<MapCircle> circles;
   final List<List<LatLng>> pathSegments;
   final List<MapPin> pins;
+
+  /// Cible de recentrage (tap membre). [focusGeneration] change à chaque demande.
+  final double? focusLatitude;
+  final double? focusLongitude;
+  final int focusGeneration;
+
+  /// Statut du point principal (carte jeune / ma position).
+  final CareLevel? careLevel;
+
+  CareLevel get resolvedCareLevel =>
+      careLevel ?? ((isUnsynced || isStale) ? CareLevel.attention : CareLevel.secure);
 
   bool get hasPoint => latitude != null && longitude != null;
 
@@ -87,6 +154,9 @@ class MapViewModel {
     if (current != null) {
       return current;
     }
+    if (pins.isNotEmpty) {
+      return pins.first.point;
+    }
     if (circles.isNotEmpty) {
       return circles.first.point;
     }
@@ -96,7 +166,7 @@ class MapViewModel {
   /// Niveau de zoom déduit du plus grand rayon à faire tenir à l'écran.
   double get zoom {
     if (circles.isEmpty) {
-      return hasPoint ? 15 : 12;
+      return (hasPoint || pins.isNotEmpty) ? 15 : 12;
     }
     var largest = 0.0;
     for (final circle in circles) {
@@ -129,19 +199,36 @@ class MapViewModel {
     return 15;
   }
 
-  /// Couleur de la pastille de position.
+  /// Couleur de la pastille de position (mêmes règles que le sheet / les pins).
   ///
-  /// Une position ancienne ou non synchronisée n'est jamais stylée comme une
-  /// position actuelle : c'est une règle produit, pas une préférence visuelle.
-  Color pointColor(ColorScheme scheme) {
-    if (isUnsynced) {
-      return scheme.tertiary;
-    }
-    if (isStale) {
-      return scheme.error;
-    }
-    return scheme.primary;
+  /// Stale ou file non sync = Attention (ambre), jamais un rouge d’urgence.
+  /// Le rouge est réservé au SOS ([CareLevel.danger]).
+  Color pointColor(ColorScheme _) {
+    return careLevelColor(resolvedCareLevel);
   }
+
+  /// True si une pastille recouvre déjà le point principal (évite un double icône).
+  bool get pointCoveredByPin {
+    final current = point;
+    if (current == null) {
+      return false;
+    }
+    for (final pin in pins) {
+      if ((pin.latitude - current.latitude).abs() < 1e-6 &&
+          (pin.longitude - current.longitude).abs() < 1e-6) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
+/// Pastille membre : statut unifié (vert / ambre / rouge SOS).
+Color mapPinColor(MapPin pin) {
+  if (pin.isTestimony) {
+    return CityCareBrand.mapTestimony;
+  }
+  return careLevelColor(pin.resolvedCareLevel);
 }
 
 /// Couleur porteuse de sens d'un cercle de zone.

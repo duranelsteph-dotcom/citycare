@@ -22,7 +22,7 @@ enum LocationAccessStatus {
 
 /// Résultat d'une vérification d'accès à la localisation.
 class LocationAccess {
-  const LocationAccess(this.status, {this.isPrecise = true});
+  const LocationAccess(this.status, {this.isPrecise = true, this.isAlways = false});
 
   final LocationAccessStatus status;
 
@@ -30,6 +30,10 @@ class LocationAccess {
   /// (Android 12+ « position approximative »). CityCare fonctionne quand même,
   /// mais la précision affichée sur la carte est plus large.
   final bool isPrecise;
+
+  /// `true` seulement si le système a accordé « toujours » (arrière-plan).
+  /// « Pendant l’utilisation » reste [isGranted] pour la carte et le SOS.
+  final bool isAlways;
 
   static const LocationAccess granted = LocationAccess(LocationAccessStatus.granted);
 

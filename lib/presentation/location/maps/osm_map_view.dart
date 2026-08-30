@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../app/brand.dart';
 import 'map_data.dart';
+import 'map_pin_marker.dart';
 
 /// Carte OpenStreetMap (flutter_map).
 ///
@@ -29,6 +29,17 @@ class _OsmMapViewState extends State<OsmMapView> {
     super.didUpdateWidget(oldWidget);
     final model = widget.model;
     final previous = oldWidget.model;
+    if (model.focusGeneration != previous.focusGeneration &&
+        model.focusLatitude != null &&
+        model.focusLongitude != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_ready) {
+          return;
+        }
+        _controller.move(LatLng(model.focusLatitude!, model.focusLongitude!), 16);
+      });
+      return;
+    }
     if (model.latitude != previous.latitude ||
         model.longitude != previous.longitude ||
         model.circles.length != previous.circles.length) {
@@ -82,7 +93,9 @@ class _OsmMapViewState extends State<OsmMapView> {
       );
     }
 
-    return FlutterMap(
+    // Clip : attribution / pin ne débordent pas d’1 px sous la carte.
+    return ClipRect(
+      child: FlutterMap(
       mapController: _controller,
       options: MapOptions(
         initialCenter: model.center,
@@ -130,14 +143,14 @@ class _OsmMapViewState extends State<OsmMapView> {
                   ),
             ],
           ),
-        if (point != null)
+        if (point != null && !model.pointCoveredByPin)
           MarkerLayer(
             markers: [
               Marker(
                 point: point,
                 width: 44,
                 height: 44,
-                alignment: Alignment.topCenter,
+                alignment: Alignment.bottomCenter,
                 child: Icon(Icons.location_on, color: pointColor, size: 40),
               ),
             ],
@@ -148,19 +161,25 @@ class _OsmMapViewState extends State<OsmMapView> {
               for (final pin in model.pins)
                 Marker(
                   point: pin.point,
-                  width: 36,
-                  height: 36,
-                  alignment: Alignment.topCenter,
-                  child: Icon(
-                    pin.isTestimony ? Icons.record_voice_over : Icons.place,
-                    color: pin.isTestimony ? CityCareBrand.mapTestimony : scheme.primary,
-                    size: 28,
-                  ),
+                  width: mapPinMarkerWidth(pin),
+                  height: mapPinMarkerHeight(pin),
+                  alignment: Alignment.bottomCenter,
+                  child: MapPinMarker(pin: pin),
                 ),
             ],
           ),
-        const SimpleAttributionWidget(source: Text('OpenStreetMap')),
+        const Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(4, 4, 8, 4),
+            child: Text(
+              '© OpenStreetMap',
+              style: TextStyle(fontSize: 10, color: Color(0x99000000)),
+            ),
+          ),
+        ),
       ],
+      ),
     );
   }
 }

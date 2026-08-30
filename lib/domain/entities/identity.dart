@@ -11,6 +11,7 @@ class UserAccount {
     required this.updatedAt,
     this.email,
     this.youngPersonId,
+    this.photoUrl,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class UserAccount {
   final UserRole role;
   final bool isActive;
   final String? youngPersonId;
+  final String? photoUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -32,12 +34,13 @@ class UserAccount {
       role: UserRoleApi.parse(json['role'] as String),
       isActive: json['is_active'] as bool,
       youngPersonId: json['young_person_id'] as String?,
+      photoUrl: json['photo_url'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
 
-  UserAccount copyWith({String? fullName}) {
+  UserAccount copyWith({String? fullName, String? photoUrl}) {
     return UserAccount(
       id: id,
       fullName: fullName ?? this.fullName,
@@ -46,6 +49,7 @@ class UserAccount {
       role: role,
       isActive: isActive,
       youngPersonId: youngPersonId,
+      photoUrl: photoUrl ?? this.photoUrl,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -85,6 +89,19 @@ class YoungPerson {
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
+
+  YoungPerson copyWith({String? displayName, String? photoUrl}) {
+    return YoungPerson(
+      id: id,
+      userId: userId,
+      displayName: displayName ?? this.displayName,
+      birthDate: birthDate,
+      photoUrl: photoUrl ?? this.photoUrl,
+      notes: notes,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
 }
 
 class GuardianLink {
@@ -104,6 +121,7 @@ class GuardianLink {
     this.guardianPhone,
     this.youngDisplayName,
     this.youngPhone,
+    this.youngPhotoUrl,
   });
 
   final String id;
@@ -121,6 +139,7 @@ class GuardianLink {
   final String? guardianPhone;
   final String? youngDisplayName;
   final String? youngPhone;
+  final String? youngPhotoUrl;
 
   factory GuardianLink.fromJson(Map<String, dynamic> json) {
     return GuardianLink(
@@ -139,6 +158,7 @@ class GuardianLink {
       guardianPhone: json['guardian_phone'] as String?,
       youngDisplayName: json['young_display_name'] as String?,
       youngPhone: json['young_phone'] as String?,
+      youngPhotoUrl: json['young_photo_url'] as String?,
     );
   }
 }

@@ -2,7 +2,7 @@ name: citycare
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 0.43.0+1
 
 environment:
   sdk: ^3.9.0
@@ -21,6 +21,17 @@ dependencies:
   firebase_core: ^3.8.1
   firebase_messaging: ^15.1.6
   speech_to_text: ^7.0.0
+  shared_preferences: ^2.5.3
+  # Menu de partage natif (SMS / WhatsApp / etc.). Pas d'envoi automatique.
+  share_plus: ^10.1.4
+  # QR généré localement à partir du code 6 caractères. Pas de scan caméra.
+  qr_flutter: ^4.1.0
+  # Galerie + appareil photo pour l’avatar. Pas de Firebase Storage.
+  image_picker: ^1.1.2
+  # Flush périodique de la file hors ligne (Android WorkManager, ≥ 15 min).
+  workmanager: ^0.10.9
+  # Batterie du téléphone au moment d’un fix GPS. Jamais 100 % inventé.
+  battery_plus: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -29,3 +40,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Photos hero de l’accueil (3 slides prévention, style photo).
+    - assets/images/prevention/

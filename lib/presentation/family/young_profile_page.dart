@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../alerts/alert_scope.dart';
 import '../auth/auth_scope.dart';
+import '../location/background_share_tile.dart';
+import '../location/location_scope.dart';
+import '../map/care_status.dart';
+import '../notifications/notification_scope.dart';
 import 'family_scope.dart';
 
 class YoungProfilePage extends StatefulWidget {
@@ -48,14 +53,41 @@ class _YoungProfilePageState extends State<YoungProfilePage> {
   @override
   Widget build(BuildContext context) {
     final family = FamilyScope.of(context);
+    final locations = LocationScope.maybeOf(context);
+    final alerts = AlertScope.maybeOf(context);
+    final inbox = NotificationScope.maybeOf(context);
+    final user = AuthScope.of(context).user;
     return Scaffold(
       appBar: AppBar(title: const Text('Mon profil')),
       body: ListenableBuilder(
-        listenable: family,
+        listenable: Listenable.merge([
+          family,
+          if (locations != null) locations,
+          if (alerts != null) alerts,
+          if (inbox != null) inbox,
+        ]),
         builder: (context, _) {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              if (locations != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: CareStatusBadge(
+                    status: careStatusForMember(
+                      point: locations.latest,
+                      youngPersonId: user?.youngPersonId,
+                      alerts: alerts?.items ?? const [],
+                      inbox: inbox?.items ?? const [],
+                      isSelf: true,
+                      locations: locations,
+                    ),
+                    compact: false,
+                    showDisclaimer: true,
+                  ),
+                ),
+              const BackgroundShareTile(),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _name,
                 decoration: const InputDecoration(labelText: 'Prénom / nom', border: OutlineInputBorder()),

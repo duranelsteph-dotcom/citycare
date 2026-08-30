@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../core/errors/api_exception.dart';
 import '../../data/datasources/device_location_service.dart';
 import '../../data/datasources/offline_queue.dart';
+import '../../data/datasources/offline_queue_flush.dart';
 import '../../domain/entities/alerts.dart';
 import '../../domain/enums/citycare_enums.dart';
 import '../../domain/repositories/alert_repository.dart';
@@ -65,14 +68,13 @@ class AlertController extends ChangeNotifier {
       infoMessage = null;
       Position? fix;
       try {
-        fix = await _device.currentFix();
+        // 4 s max : le SOS ne doit pas attendre un GPS qui ne répond pas.
+        fix = await _device.currentFix().timeout(const Duration(seconds: 4));
       } on DeviceLocationException catch (error) {
-        // Le SOS part quand même : mieux vaut une alerte sans lieu que pas
-        // d'alerte. On dit précisément ce qui manque et pourquoi.
         infoMessage = 'SOS sans GPS : ${error.message} '
             'L’alerte partira sans lieu. Ce n’est pas un suivi en direct.';
-      } catch (_) {
-        infoMessage = 'SOS sans GPS. Ce n’est pas un suivi en direct.';
+      } catch (error) {
+        infoMessage = 'SOS sans GPS ($error). Ce n’est pas un suivi en direct.';
       }
       final draft = SosDraft(
         latitude: fix?.latitude,
@@ -90,7 +92,7 @@ class AlertController extends ChangeNotifier {
           queue.enqueueSos(draft.toJson());
           await _persist();
           infoMessage =
-              'SOS enregistré sur l’appareil. Envoi quand le réseau reviendra. '
+              'SOS enregistré sur l’appareil. ${error.message} '
               'Pas encore transmis aux contacts, pas un kidnapping confirmé.';
           return;
         }
@@ -99,36 +101,18 @@ class AlertController extends ChangeNotifier {
       items = [current!, ...items.where((item) => item.id != current!.id)];
       if (fix != null) {
         infoMessage = 'SOS envoyé avec la position du téléphone. Pas un suivi en direct, pas un kidnapping confirmé.';
+      } else {
+        infoMessage ??= 'SOS envoyé sans GPS. Pas un suivi en direct, pas un kidnapping confirmé.';
       }
     });
   }
 
   Future<int> flushPending() async {
-    var sent = 0;
-    final leftover = <Map<String, dynamic>>[];
-    for (final item in [...queue.sos]) {
-      try {
-        current = await _repository.triggerSos(
-          SosDraft(
-            latitude: (item['latitude'] as num?)?.toDouble(),
-            longitude: (item['longitude'] as num?)?.toDouble(),
-            accuracy: (item['accuracy'] as num?)?.toDouble(),
-            recordedAt: item['recorded_at'] == null ? null : DateTime.parse(item['recorded_at'] as String),
-            description: item['description'] as String?,
-            youngPersonId: item['young_person_id'] as String?,
-            source: item['source'] == null ? null : AlertSourceApi.parse(item['source'] as String),
-          ),
-        );
-        sent += 1;
-      } on ApiException catch (error) {
-        if (error.isOffline) {
-          leftover.add(item);
-        }
-      }
-    }
-    queue.sos
-      ..clear()
-      ..addAll(leftover);
+    final sent = await flushQueuedSos(
+      queue: queue,
+      alerts: _repository,
+      onSent: (alert) => current = alert,
+    );
     await _persist();
     notifyListeners();
     return sent;
@@ -168,8 +152,8 @@ class AlertController extends ChangeNotifier {
     } on ApiException catch (error) {
       errorMessage = error.message;
       return false;
-    } catch (_) {
-      errorMessage = 'SOS indisponible pour le moment.';
+    } catch (error) {
+      errorMessage = 'SOS indisponible : $error';
       return false;
     } finally {
       isBusy = false;

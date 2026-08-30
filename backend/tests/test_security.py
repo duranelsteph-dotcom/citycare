@@ -21,7 +21,7 @@ def _register(role: UserRole = UserRole.PARENT) -> dict:
     phone = _phone()
     response = client.post(
         "/api/v1/auth/register",
-        json={"full_name": "Sec Test", "phone": phone, "password": "motdepasse", "role": role.value},
+        json={"full_name": "Sec Test", "phone": phone, "password": "VilleCare1!", "role": role.value},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -32,7 +32,7 @@ def _register(role: UserRole = UserRole.PARENT) -> dict:
 def test_security_headers_on_health() -> None:
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.34.0"
+    assert response.json()["version"] == "0.43.0"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "no-store" in response.headers["cache-control"]
@@ -44,6 +44,8 @@ def test_security_status_exposes_no_secret() -> None:
     body = response.json()
     assert "secret_key" not in body
     assert body["passwords_hashed"] is True
+    assert body["otp_hashed"] is True
+    assert body["otp_sms_configured"] is False
     assert body["kit_secrets_hashed"] is True
     assert body["jwt_in_query_forbidden"] is True
     assert body["default_parent_live_location"] is False
@@ -116,9 +118,9 @@ def test_login_same_message_unknown_or_wrong_password() -> None:
     phone = _phone()
     client.post(
         "/api/v1/auth/register",
-        json={"full_name": "Login Sec", "phone": phone, "password": "motdepasse", "role": UserRole.PARENT.value},
+        json={"full_name": "Login Sec", "phone": phone, "password": "VilleCare1!", "role": UserRole.PARENT.value},
     )
-    unknown = client.post("/api/v1/auth/login", json={"phone": _phone(), "password": "motdepasse"})
+    unknown = client.post("/api/v1/auth/login", json={"phone": _phone(), "password": "VilleCare1!"})
     wrong = client.post("/api/v1/auth/login", json={"phone": phone, "password": "incorrect1"})
     assert unknown.status_code == 401
     assert wrong.status_code == 401
@@ -138,7 +140,7 @@ def test_failed_logins_are_rate_limited() -> None:
     phone = _phone()
     client.post(
         "/api/v1/auth/register",
-        json={"full_name": "Rate Sec", "phone": phone, "password": "motdepasse", "role": UserRole.PARENT.value},
+        json={"full_name": "Rate Sec", "phone": phone, "password": "VilleCare1!", "role": UserRole.PARENT.value},
     )
     last = None
     for _ in range(settings.login_fail_max):
@@ -175,3 +177,15 @@ def test_valid_token_still_works() -> None:
         issuer=settings.jwt_issuer,
     )
     assert payload["typ"] == "access"
+
+def test_cors_regex_allows_lan_and_emulator() -> None:
+    import re
+
+    pattern = settings.cors_origin_regex
+    assert pattern is not None
+    compiled = re.compile(pattern)
+    assert compiled.fullmatch("http://10.5.48.255:8080")
+    assert compiled.fullmatch("http://10.0.2.2:8080")
+    assert compiled.fullmatch("http://192.168.1.10")
+    assert compiled.fullmatch("http://127.0.0.1:8080")
+    assert compiled.fullmatch("https://evil.example") is None

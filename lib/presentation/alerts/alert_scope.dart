@@ -14,4 +14,9 @@ class AlertScope extends InheritedNotifier<AlertController> {
     assert(scope != null, 'AlertScope introuvable');
     return scope!.notifier!;
   }
+
+  /// Absent hors du shell (tests de pages isolées).
+  static AlertController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<AlertScope>()?.notifier;
+  }
 }

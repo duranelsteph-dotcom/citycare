@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../core/errors/api_exception.dart';
+import '../../data/datasources/background_share_store.dart';
+import '../../data/datasources/device_battery_service.dart';
 import '../../data/datasources/device_location_service.dart';
 import '../../data/datasources/offline_queue.dart';
+import '../../data/datasources/offline_queue_flush.dart';
+import '../../domain/entities/background_share.dart';
 import '../../domain/entities/emergency.dart';
 import '../../domain/entities/location_access.dart';
 import '../../domain/entities/search.dart';
@@ -15,15 +21,25 @@ class LocationController extends ChangeNotifier {
   LocationController(
     this._repository, {
     DeviceLocationService? device,
+    DeviceBatteryService? battery,
     OfflineQueue? queue,
+    BackgroundShareStore? backgroundStore,
     this.persist,
   })  : _device = device ?? DeviceLocationService(),
-        queue = queue ?? OfflineQueue();
+        _battery = battery ?? DeviceBatteryService(),
+        queue = queue ?? OfflineQueue(),
+        _backgroundStore = backgroundStore ?? MemoryBackgroundShareStore();
 
   final LocationRepository _repository;
   final DeviceLocationService _device;
+  final DeviceBatteryService _battery;
   final OfflineQueue queue;
+  final BackgroundShareStore _backgroundStore;
   final Future<void> Function(OfflineQueue queue)? persist;
+
+  StreamSubscription<Position>? _backgroundSub;
+  bool _publishingBackgroundFix = false;
+  Position? _pendingBackgroundFix;
 
   Future<void> _persist() async {
     await persist?.call(queue);
@@ -32,8 +48,16 @@ class LocationController extends ChangeNotifier {
   TrackerLocation? latest;
   List<TrackerLocation> history = [];
   Trajectory? trajectory;
+  TripHistory? tripHistory;
+  TripPeriod tripPeriod = TripPeriod.today;
+  DateTime? tripFrom;
+  DateTime? tripTo;
   List<PositionShare> shares = [];
   List<PositionShare> receivedShares = [];
+
+  /// Dernières positions connues des jeunes liés, pour la carte famille.
+  /// Une entrée absente signifie « pas d’accès » ou « aucune position ».
+  final Map<String, TrackerLocation> familyLatest = {};
   Position? unsyncedFix;
   bool isBusy = false;
   String? errorMessage;
@@ -49,6 +73,20 @@ class LocationController extends ChangeNotifier {
 
   /// Vraie pendant l'affichage de la boîte de dialogue système.
   bool isRequestingLocationAccess = false;
+
+  /// Opt-in utilisateur « Partage en arrière-plan » (persisté, pas un secret).
+  bool backgroundOptIn = false;
+
+  /// État affiché (actif / permission / GPS). Jamais « en direct ».
+  BackgroundShareStatus backgroundStatus = BackgroundShareStatus.off;
+
+  bool get isBackgroundStreamActive => _backgroundSub != null;
+
+  /// File encore à envoyer (positions + SOS). Ne pas afficher « synchronisé ».
+  bool get hasPendingOffline => queue.hasPending;
+
+  /// Point local ou file de positions : pas encore côté serveur.
+  bool get hasUnsyncedLocations => unsyncedFix != null || queue.locations.isNotEmpty;
 
   /// Lit l'état d'accès sans afficher de demande système.
   Future<LocationAccess> refreshLocationAccess() async {
@@ -80,6 +118,130 @@ class LocationController extends ChangeNotifier {
   /// Ouvre les réglages de l'application (refus définitif).
   Future<void> openAppSettings() async {
     await _device.openAppSettings();
+  }
+
+  /// Position ponctuelle, ou `null` si le GPS refuse / échoue (pas inventée).
+  Future<Position?> tryCurrentFix() async {
+    try {
+      final fix = await _device.currentFix();
+      unsyncedFix = fix;
+      notifyListeners();
+      return fix;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Relit l’opt-in persisté et relance le flux si les permissions tiennent.
+  Future<void> restoreBackgroundSharing() async {
+    backgroundOptIn = await _backgroundStore.readOptIn();
+    if (!backgroundOptIn) {
+      backgroundStatus = BackgroundShareStatus.off;
+      notifyListeners();
+      return;
+    }
+    await _startBackgroundStream(persistOptIn: false);
+  }
+
+  /// Interrupteur profil : active ou coupe le flux GPS réel.
+  Future<bool> setBackgroundSharing(bool enabled) async {
+    if (!enabled) {
+      await pauseBackgroundSharing(persistOptIn: true);
+      return true;
+    }
+    return _startBackgroundStream(persistOptIn: true);
+  }
+
+  /// Coupe le flux (logout, GPS off). [persistOptIn] false garde le choix.
+  Future<void> pauseBackgroundSharing({bool persistOptIn = false}) async {
+    await _backgroundSub?.cancel();
+    _backgroundSub = null;
+    _pendingBackgroundFix = null;
+    if (persistOptIn) {
+      backgroundOptIn = false;
+      await _backgroundStore.writeOptIn(false);
+    }
+    backgroundStatus = BackgroundSharePolicy.resolve(
+      optIn: backgroundOptIn,
+      access: locationAccess,
+      streamActive: false,
+    );
+    notifyListeners();
+  }
+
+  Future<bool> _startBackgroundStream({required bool persistOptIn}) async {
+    isRequestingLocationAccess = true;
+    notifyListeners();
+    try {
+      if (persistOptIn) {
+        backgroundOptIn = true;
+        await _backgroundStore.writeOptIn(true);
+      }
+      final access = await _device.requestBackgroundAccess();
+      locationAccess = access;
+      if (!BackgroundSharePolicy.canStart(access)) {
+        await _backgroundSub?.cancel();
+        _backgroundSub = null;
+        backgroundStatus = BackgroundSharePolicy.resolve(
+          optIn: backgroundOptIn,
+          access: access,
+          streamActive: false,
+        );
+        return false;
+      }
+      if (_backgroundSub != null) {
+        backgroundStatus = BackgroundShareStatus.active;
+        return true;
+      }
+      // Flux GPS matériel — pas un Timer qui invente des coordonnées.
+      _backgroundSub = _device.watchPositions().listen(
+        _onBackgroundFix,
+        onError: _onBackgroundStreamError,
+        cancelOnError: false,
+      );
+      backgroundStatus = BackgroundShareStatus.active;
+      return true;
+    } finally {
+      isRequestingLocationAccess = false;
+      notifyListeners();
+    }
+  }
+
+  void _onBackgroundStreamError(Object error) {
+    if (error is LocationServiceDisabledException) {
+      locationAccess = const LocationAccess(LocationAccessStatus.serviceDisabled);
+      backgroundStatus = BackgroundShareStatus.gpsOff;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _onBackgroundFix(Position fix) async {
+    if (_publishingBackgroundFix) {
+      _pendingBackgroundFix = fix;
+      return;
+    }
+    _publishingBackgroundFix = true;
+    try {
+      await _publishDeviceFix(fix, refreshHistory: false);
+      final leftover = _pendingBackgroundFix;
+      _pendingBackgroundFix = null;
+      if (leftover != null) {
+        await _publishDeviceFix(leftover, refreshHistory: false);
+      }
+    } on DeviceLocationException catch (error) {
+      errorMessage = error.message;
+      locationAccess = error.access ?? locationAccess;
+      notifyListeners();
+    } on ApiException catch (error) {
+      if (!error.isOffline) {
+        errorMessage = error.message;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Un point manqué n’arrête pas le flux GPS.
+    } finally {
+      _publishingBackgroundFix = false;
+    }
   }
 
   Future<void> loadMine() => watchMine(busy: true);
@@ -135,74 +297,99 @@ class LocationController extends ChangeNotifier {
   Future<bool> captureAndPublish() async {
     return _run(() async {
       final fix = await _device.currentFix();
-      unsyncedFix = fix;
-      final payload = <String, dynamic>{
-        'latitude': fix.latitude,
-        'longitude': fix.longitude,
-        'accuracy': fix.accuracy,
-        'altitude': fix.altitude,
-        'speed': (fix.speed.isNaN || fix.speed < 0) ? null : fix.speed,
-        'heading': (fix.heading.isNaN || fix.heading < 0) ? null : fix.heading,
-        'recorded_at': fix.timestamp.toUtc().toIso8601String(),
-      };
+      await _publishDeviceFix(fix, refreshHistory: true);
+    });
+  }
+
+  /// Même API / même file que le bouton manuel. Horodatage GPS conservé.
+  ///
+  /// Batterie lue au moment du fix (premier plan et flux Phase 12).
+  /// Si la lecture échoue, le champ est omis — pas un 100 % inventé.
+  Future<void> _publishDeviceFix(Position fix, {required bool refreshHistory}) async {
+    unsyncedFix = fix;
+    final batteryLevel = await _battery.currentLevel();
+    final payload = phoneFixPayload(fix, batteryLevel: batteryLevel);
+    try {
+      latest = await _repository.publishPhoneFix(
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        accuracy: fix.accuracy,
+        altitude: fix.altitude,
+        speed: (fix.speed.isNaN || fix.speed < 0) ? null : fix.speed,
+        heading: (fix.heading.isNaN || fix.heading < 0) ? null : fix.heading,
+        recordedAt: fix.timestamp,
+        batteryLevel: batteryLevel,
+      );
+      unsyncedFix = null;
+    } on ApiException catch (error) {
+      if (error.isOffline) {
+        queue.enqueueLocation(payload);
+        await _persist();
+        errorMessage =
+            'Position enregistrée sur l’appareil. Synchronisation plus tard. '
+            'L’heure du téléphone est conservée — pas Last Write Wins, pas la position actuelle.';
+        notifyListeners();
+        return;
+      }
+      rethrow;
+    }
+    if (!refreshHistory) {
+      notifyListeners();
+      return;
+    }
+    history = await _repository.myHistory();
+    try {
+      trajectory = await _repository.myTrajectory();
+    } on ApiException {
+      trajectory = null;
+    }
+  }
+
+  Future<int> flushPending() async {
+    final sent = await flushQueuedLocations(queue: queue, locations: _repository);
+    await _persist();
+    notifyListeners();
+    return sent;
+  }
+
+  Future<bool> loadMyTrips({TripPeriod? period, DateTime? from, DateTime? to}) {
+    return _run(() async {
+      if (period != null) {
+        tripPeriod = period;
+      }
+      tripFrom = from;
+      tripTo = to;
+      tripHistory = await _repository.myTrips(
+        period: tripPeriod == TripPeriod.custom ? null : tripPeriod,
+        from: from,
+        to: to,
+      );
+    });
+  }
+
+  Future<bool> loadChildTrips(String youngPersonId, {TripPeriod? period, DateTime? from, DateTime? to}) {
+    return _run(() async {
+      if (period != null) {
+        tripPeriod = period;
+      }
+      tripFrom = from;
+      tripTo = to;
       try {
-        latest = await _repository.publishPhoneFix(
-          latitude: fix.latitude,
-          longitude: fix.longitude,
-          accuracy: fix.accuracy,
-          altitude: fix.altitude,
-          speed: (fix.speed.isNaN || fix.speed < 0) ? null : fix.speed,
-          heading: (fix.heading.isNaN || fix.heading < 0) ? null : fix.heading,
-          recordedAt: fix.timestamp,
+        tripHistory = await _repository.childTrips(
+          youngPersonId,
+          period: tripPeriod == TripPeriod.custom ? null : tripPeriod,
+          from: from,
+          to: to,
         );
-        unsyncedFix = null;
       } on ApiException catch (error) {
-        if (error.isOffline) {
-          queue.enqueueLocation(payload);
-          await _persist();
-          errorMessage =
-              'Position enregistrée sur l’appareil. Synchronisation plus tard. '
-              'L’heure du téléphone est conservée — pas Last Write Wins, pas la position actuelle.';
+        tripHistory = null;
+        if (error.statusCode == 403 || error.statusCode == 404) {
+          errorMessage = error.message;
           return;
         }
         rethrow;
       }
-      history = await _repository.myHistory();
-      try {
-        trajectory = await _repository.myTrajectory();
-      } on ApiException {
-        trajectory = null;
-      }
     });
-  }
-
-  Future<int> flushPending() async {
-    var sent = 0;
-    final leftover = <Map<String, dynamic>>[];
-    for (final item in [...queue.locations]) {
-      try {
-        await _repository.publishPhoneFix(
-          latitude: (item['latitude'] as num).toDouble(),
-          longitude: (item['longitude'] as num).toDouble(),
-          accuracy: (item['accuracy'] as num?)?.toDouble(),
-          altitude: (item['altitude'] as num?)?.toDouble(),
-          speed: (item['speed'] as num?)?.toDouble(),
-          heading: (item['heading'] as num?)?.toDouble(),
-          recordedAt: item['recorded_at'] == null ? null : DateTime.parse(item['recorded_at'] as String),
-        );
-        sent += 1;
-      } on ApiException catch (error) {
-        if (error.isOffline) {
-          leftover.add(item);
-        }
-      }
-    }
-    queue.locations
-      ..clear()
-      ..addAll(leftover);
-    await _persist();
-    notifyListeners();
-    return sent;
   }
 
   Future<bool> loadEmergency(String youngPersonId) {
@@ -220,6 +407,33 @@ class LocationController extends ChangeNotifier {
   Future<bool> loadReceivedShares() {
     return _run(() async {
       receivedShares = await _repository.receivedShares();
+    });
+  }
+
+  /// Charge les pastilles de plusieurs jeunes sans écraser [latest].
+  ///
+  /// Un 403/404 sur un enfant est ignoré : les autres pastilles restent
+  /// affichables. Ce n’est pas un GPS continu.
+  Future<bool> loadFamilyLatest(Iterable<String> youngPersonIds) {
+    return _run(() async {
+      final next = <String, TrackerLocation>{};
+      for (final id in youngPersonIds) {
+        try {
+          final watch = await _repository.watchChild(id);
+          final point = watch.latest;
+          if (point != null) {
+            next[id] = point;
+          }
+        } on ApiException catch (error) {
+          if (error.statusCode == 403 || error.statusCode == 404) {
+            continue;
+          }
+          rethrow;
+        }
+      }
+      familyLatest
+        ..clear()
+        ..addAll(next);
     });
   }
 
@@ -278,5 +492,12 @@ class LocationController extends ChangeNotifier {
       }
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _backgroundSub?.cancel();
+    _backgroundSub = null;
+    super.dispose();
   }
 }

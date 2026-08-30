@@ -15,6 +15,7 @@ class LocationCreate(BaseModel):
     speed: float | None = Field(default=None, ge=0)
     heading: float | None = Field(default=None, ge=0, le=360)
     recorded_at: datetime | None = None
+    # Batterie téléphone (POST /locations) ou kit (IoT). Omis si inconnue — jamais 100 inventé.
     battery_level: int | None = Field(default=None, ge=0, le=100)
 
 

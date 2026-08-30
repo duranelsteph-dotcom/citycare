@@ -12,8 +12,72 @@ import '../location/emergency_page.dart';
 import '../location/location_map.dart';
 import 'case_scope.dart';
 
+/// Ouvre la création d’avis (proche / parent). Visible depuis le menu principal.
+Future<void> startMissingPersonDeclaration(BuildContext context) async {
+  final family = FamilyScope.of(context);
+  await family.loadForGuardian();
+  if (!context.mounted) {
+    return;
+  }
+  await _startDeclaration(context, family);
+}
+
+Future<void> _startDeclaration(BuildContext context, FamilyController family) async {
+  final eligible = family.active.where((link) => link.canReportMissing).toList();
+  if (eligible.isEmpty) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Aucun jeune ne vous a autorisé à déclarer une disparition.'),
+      ),
+    );
+    return;
+  }
+  GuardianLink chosen = eligible.first;
+  if (eligible.length > 1) {
+    final selected = await showModalBottomSheet<GuardianLink>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('Quel jeune ?')),
+              ...eligible.map(
+                (link) => ListTile(
+                  title: Text(link.youngDisplayName ?? 'Jeune'),
+                  onTap: () => Navigator.pop(context, link),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null) {
+      return;
+    }
+    chosen = selected;
+  }
+  if (!context.mounted) {
+    return;
+  }
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => CaseCreatePage(
+        youngPersonId: chosen.youngPersonId,
+        displayName: chosen.youngDisplayName ?? 'Jeune',
+      ),
+    ),
+  );
+}
+
 class CasesPage extends StatefulWidget {
-  const CasesPage({super.key});
+  const CasesPage({super.key, this.title});
+
+  final String? title;
 
   @override
   State<CasesPage> createState() => _CasesPageState();
@@ -24,11 +88,13 @@ class _CasesPageState extends State<CasesPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final isYoung = AuthScope.of(context).user?.role == UserRole.young;
-      if (isYoung) {
+      final role = AuthScope.of(context).user?.role;
+      if (role == UserRole.young) {
         CaseScope.of(context).loadMineAsYoung();
       } else {
-        FamilyScope.of(context).loadForGuardian();
+        if (role != UserRole.authority) {
+          FamilyScope.of(context).loadForGuardian();
+        }
         CaseScope.of(context).loadMineAsGuardian();
       }
     });
@@ -38,16 +104,19 @@ class _CasesPageState extends State<CasesPage> {
   Widget build(BuildContext context) {
     final cases = CaseScope.of(context);
     final family = FamilyScope.of(context);
-    final isYoung = AuthScope.of(context).user?.role == UserRole.young;
+    final role = AuthScope.of(context).user?.role;
+    final isYoung = role == UserRole.young;
+    final canDeclare = role == UserRole.parent || role == UserRole.relative;
     return Scaffold(
-      appBar: AppBar(title: const Text('Dossiers de disparition')),
-      floatingActionButton: isYoung
-          ? null
-          : FloatingActionButton.extended(
+      appBar: AppBar(title: Text(widget.title ?? 'Dossiers de disparition')),
+      floatingActionButton: canDeclare
+          ? FloatingActionButton.extended(
+              key: const Key('cases-declare'),
               onPressed: () => _startDeclaration(context, family),
               icon: const Icon(Icons.person_search),
               label: const Text('Déclarer'),
-            ),
+            )
+          : null,
       body: ListenableBuilder(
         listenable: Listenable.merge([cases, family]),
         builder: (context, _) {
@@ -95,57 +164,6 @@ class _CasesPageState extends State<CasesPage> {
     );
   }
 
-  Future<void> _startDeclaration(BuildContext context, FamilyController family) async {
-    final eligible = family.active.where((link) => link.canReportMissing).toList();
-    if (eligible.isEmpty) {
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Aucun jeune ne vous a autorisé à déclarer une disparition.'),
-        ),
-      );
-      return;
-    }
-    GuardianLink chosen = eligible.first;
-    if (eligible.length > 1) {
-      final selected = await showModalBottomSheet<GuardianLink>(
-        context: context,
-        builder: (context) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ListTile(title: Text('Quel jeune ?')),
-                ...eligible.map(
-                  (link) => ListTile(
-                    title: Text(link.youngDisplayName ?? 'Jeune'),
-                    onTap: () => Navigator.pop(context, link),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-      if (selected == null) {
-        return;
-      }
-      chosen = selected;
-    }
-    if (!context.mounted) {
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => CaseCreatePage(
-          youngPersonId: chosen.youngPersonId,
-          displayName: chosen.youngDisplayName ?? 'Jeune',
-        ),
-      ),
-    );
-  }
 }
 
 class CaseCreatePage extends StatefulWidget {

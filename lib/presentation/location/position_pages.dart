@@ -5,9 +5,15 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/search.dart';
 import '../../domain/entities/tracking.dart';
 import '../../domain/enums/citycare_enums.dart';
+import '../alerts/alert_scope.dart';
+import '../auth/auth_scope.dart';
 import '../auth/role_labels.dart';
+import '../map/care_status.dart';
+import '../notifications/notification_scope.dart';
 import '../risk/risk_zone_scope.dart';
 import '../zones/zone_scope.dart';
+import 'background_share_tile.dart';
+import 'history_page.dart';
 import 'location_map.dart';
 import 'location_permission_gate.dart';
 import 'location_scope.dart';
@@ -39,6 +45,8 @@ class _MyPositionPageState extends State<MyPositionPage> {
     super.dispose();
   }
 
+  /// Rafraîchit la dernière position connue (serveur). N’invente aucun point GPS.
+  /// Si [_followPhone] : un vrai relevé appareil, uniquement écran ouvert.
   Future<void> _cycle({bool first = false}) async {
     final locations = LocationScope.of(context);
     if (!first && _followPhone) {
@@ -67,6 +75,13 @@ class _MyPositionPageState extends State<MyPositionPage> {
         title: const Text('Ma position'),
         actions: [
           IconButton(
+            tooltip: 'Historique des trajets',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const HistoryPage()),
+            ),
+            icon: const Icon(Icons.history),
+          ),
+          IconButton(
             tooltip: 'Actualiser',
             onPressed: locations.isBusy ? null : () => _cycle(first: true),
             icon: const Icon(Icons.refresh),
@@ -85,7 +100,16 @@ class _MyPositionPageState extends State<MyPositionPage> {
                   longitude: locations.unsyncedFix?.longitude ?? locations.latest?.longitude,
                   accuracyMeters: locations.unsyncedFix?.accuracy ?? locations.latest?.accuracy,
                   isStale: locations.unsyncedFix == null && (locations.latest?.isStale ?? false),
-                  isUnsynced: locations.unsyncedFix != null,
+                  isUnsynced: locations.hasUnsyncedLocations,
+                  careStatus: careStatusForMember(
+                    point: locations.latest,
+                    youngPersonId: AuthScope.maybeOf(context)?.user?.youngPersonId ??
+                        locations.latest?.youngPersonId,
+                    alerts: AlertScope.maybeOf(context)?.items ?? const [],
+                    inbox: NotificationScope.maybeOf(context)?.items ?? const [],
+                    isSelf: true,
+                    locations: locations,
+                  ),
                   pathSegments: trajectorySegments(locations.trajectory),
                   circles: [
                     for (final zone in zones.zones)
@@ -113,6 +137,21 @@ class _MyPositionPageState extends State<MyPositionPage> {
                     // Le parcours d'autorisation est traité ici, au plus près
                     // du bouton qui a besoin du GPS.
                     const LocationPermissionCard(),
+                    const BackgroundShareTile(),
+                    CareStatusBadge(
+                      status: careStatusForMember(
+                        point: locations.latest,
+                        youngPersonId: AuthScope.maybeOf(context)?.user?.youngPersonId ??
+                            locations.latest?.youngPersonId,
+                        alerts: AlertScope.maybeOf(context)?.items ?? const [],
+                        inbox: NotificationScope.maybeOf(context)?.items ?? const [],
+                        isSelf: true,
+                        locations: locations,
+                      ),
+                      compact: false,
+                      showDisclaimer: true,
+                    ),
+                    const SizedBox(height: 8),
                     const Text('Pas un suivi en direct. Une pastille ancienne n’est pas la position actuelle.'),
                     const SizedBox(height: 8),
                     Text(_trajectoryCopy(locations.trajectory)),
@@ -230,6 +269,18 @@ class _ChildPositionPageState extends State<ChildPositionPage> {
         title: Text('Position · ${widget.displayName}'),
         actions: [
           IconButton(
+            tooltip: 'Historique des trajets',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => HistoryPage(
+                  youngPersonId: widget.youngPersonId,
+                  displayName: widget.displayName,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.history),
+          ),
+          IconButton(
             tooltip: 'Actualiser',
             onPressed: locations.isBusy ? null : () => _cycle(first: true),
             icon: const Icon(Icons.refresh),
@@ -248,6 +299,12 @@ class _ChildPositionPageState extends State<ChildPositionPage> {
                   longitude: locations.latest?.longitude,
                   accuracyMeters: locations.latest?.accuracy,
                   isStale: locations.latest?.isStale ?? false,
+                  careStatus: careStatusForMember(
+                    point: locations.latest,
+                    youngPersonId: widget.youngPersonId,
+                    alerts: AlertScope.maybeOf(context)?.items ?? const [],
+                    inbox: NotificationScope.maybeOf(context)?.items ?? const [],
+                  ),
                   pathSegments: trajectorySegments(locations.trajectory),
                   circles: [
                     for (final zone in zones.zones)
@@ -272,6 +329,17 @@ class _ChildPositionPageState extends State<ChildPositionPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    CareStatusBadge(
+                      status: careStatusForMember(
+                        point: locations.latest,
+                        youngPersonId: widget.youngPersonId,
+                        alerts: AlertScope.maybeOf(context)?.items ?? const [],
+                        inbox: NotificationScope.maybeOf(context)?.items ?? const [],
+                      ),
+                      compact: false,
+                      showDisclaimer: true,
+                    ),
+                    const SizedBox(height: 8),
                     Text(accessLabel),
                     const SizedBox(height: 8),
                     Text(_trajectoryCopy(locations.trajectory)),
@@ -305,13 +373,17 @@ class _PositionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.46;
     return Material(
       elevation: 8,
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: child,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: child,
+          ),
         ),
       ),
     );

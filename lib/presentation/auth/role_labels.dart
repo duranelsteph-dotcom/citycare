@@ -16,9 +16,11 @@ String roleHomeMessage(UserRole role) {
     UserRole.parent =>
       'Rattachez un jeune, définissez des zones, et recevez SOS ou partages. Ce n’est pas un kidnapping confirmé, pas un GPS continu.',
     UserRole.relative =>
-      'Un jeune peut vous autoriser comme proche. Vos permissions restent limitées et explicites.',
+      'Un jeune peut vous autoriser comme proche. Déclarez un avis de recherche depuis le menu. '
+      'Ce n’est pas un kidnapping confirmé.',
     UserRole.authority =>
-      'Vous pouvez déclarer des zones à risque pour la prévention. Ce n’est pas un kidnapping confirmé.',
+      'Traitez les alertes, suivez les dossiers et consultez les avis de recherche. '
+      'Aucun SOS à déclencher. Ce n’est pas un kidnapping confirmé.',
   };
 }
 
@@ -130,6 +132,7 @@ String trackerEventTypeLabel(TrackerEventType type) {
     TrackerEventType.deviceRemoved => 'Kit retiré',
     TrackerEventType.lowBattery => 'Batterie faible',
     TrackerEventType.riskZoneEnter => 'Zone à risque',
+    TrackerEventType.anomaly => 'Anomalie détectée',
   };
 }
 

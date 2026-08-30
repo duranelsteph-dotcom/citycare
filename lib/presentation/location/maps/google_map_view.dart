@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:latlong2/latlong.dart' as osm;
 
+import '../../map/care_status.dart';
 import 'map_data.dart';
 
 /// Carte Google Maps.
@@ -31,6 +32,20 @@ class _GoogleMapsViewState extends State<GoogleMapsView> {
     super.didUpdateWidget(oldWidget);
     final model = widget.model;
     final previous = oldWidget.model;
+    if (model.focusGeneration != previous.focusGeneration &&
+        model.focusLatitude != null &&
+        model.focusLongitude != null) {
+      final controller = _controller;
+      if (controller != null) {
+        controller.animateCamera(
+          gmaps.CameraUpdate.newLatLngZoom(
+            gmaps.LatLng(model.focusLatitude!, model.focusLongitude!),
+            16,
+          ),
+        );
+      }
+      return;
+    }
     if (model.latitude != previous.latitude ||
         model.longitude != previous.longitude ||
         model.circles.length != previous.circles.length) {
@@ -105,7 +120,7 @@ class _GoogleMapsViewState extends State<GoogleMapsView> {
     }
 
     final markers = <gmaps.Marker>{};
-    if (point != null) {
+    if (point != null && !model.pointCoveredByPin) {
       markers.add(
         gmaps.Marker(
           markerId: const gmaps.MarkerId('position'),
@@ -124,17 +139,18 @@ class _GoogleMapsViewState extends State<GoogleMapsView> {
       final pin = model.pins[i];
       markers.add(
         gmaps.Marker(
-          markerId: gmaps.MarkerId('pin-$i'),
+          markerId: gmaps.MarkerId(pin.id ?? 'pin-$i'),
           position: _toGoogle(pin.point),
-          icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(
-            pin.isTestimony ? gmaps.BitmapDescriptor.hueCyan : gmaps.BitmapDescriptor.hueAzure,
-          ),
+          icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(_pinHue(pin)),
           infoWindow: pin.isTestimony
               ? const gmaps.InfoWindow(
                   title: 'Témoignage',
                   snippet: 'Déclaration d’un tiers — non vérifiée automatiquement.',
                 )
-              : const gmaps.InfoWindow(title: 'Point signalé'),
+              : gmaps.InfoWindow(
+                  title: pin.label ?? 'Point signalé',
+                  snippet: '${pin.careCaption} · ${pin.freshnessCaption}',
+                ),
         ),
       );
     }
@@ -192,12 +208,22 @@ class _GoogleMapsViewState extends State<GoogleMapsView> {
 
 
   double _pointHue(MapViewModel model) {
-    if (model.isUnsynced) {
-      return gmaps.BitmapDescriptor.hueOrange;
+    return _hueFor(model.resolvedCareLevel);
+  }
+
+  /// Statut unifié : vert / ambre / rouge SOS — jamais un rouge pour un stale.
+  double _pinHue(MapPin pin) {
+    if (pin.isTestimony) {
+      return gmaps.BitmapDescriptor.hueCyan;
     }
-    if (model.isStale) {
-      return gmaps.BitmapDescriptor.hueRed;
-    }
-    return gmaps.BitmapDescriptor.hueAzure;
+    return _hueFor(pin.resolvedCareLevel);
+  }
+
+  double _hueFor(CareLevel level) {
+    return switch (level) {
+      CareLevel.danger => gmaps.BitmapDescriptor.hueRed,
+      CareLevel.attention => gmaps.BitmapDescriptor.hueOrange,
+      CareLevel.secure => gmaps.BitmapDescriptor.hueGreen,
+    };
   }
 }

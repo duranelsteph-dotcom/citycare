@@ -4,6 +4,8 @@ enum GuardianRelation { parent, relative, other }
 
 enum GuardianLinkStatus { pending, active, revoked }
 
+enum CircleRole { owner, member }
+
 enum AlertStatus { created, active, acknowledged, inProgress, resolved, cancelled }
 
 enum AlertSource { mobile, iot, relative, voice, system }
@@ -24,6 +26,7 @@ enum TrackerEventType {
   deviceRemoved,
   lowBattery,
   riskZoneEnter,
+  anomaly,
 }
 
 enum CaseStatus { open, searching, found, closed }
@@ -85,6 +88,19 @@ extension GuardianRelationApi on GuardianRelation {
         'RELATIVE' => GuardianRelation.relative,
         'OTHER' => GuardianRelation.other,
         _ => throw FormatException('Unknown GuardianRelation: $value'),
+      };
+}
+
+extension CircleRoleApi on CircleRole {
+  String get apiValue => switch (this) {
+        CircleRole.owner => 'OWNER',
+        CircleRole.member => 'MEMBER',
+      };
+
+  static CircleRole parse(String value) => switch (value) {
+        'OWNER' => CircleRole.owner,
+        'MEMBER' => CircleRole.member,
+        _ => throw FormatException('Unknown CircleRole: $value'),
       };
 }
 
@@ -198,6 +214,7 @@ extension TrackerEventTypeApi on TrackerEventType {
         TrackerEventType.deviceRemoved => 'DEVICE_REMOVED',
         TrackerEventType.lowBattery => 'LOW_BATTERY',
         TrackerEventType.riskZoneEnter => 'RISK_ZONE_ENTER',
+        TrackerEventType.anomaly => 'ANOMALY',
       };
 
   static TrackerEventType parse(String value) => switch (value) {
@@ -210,6 +227,7 @@ extension TrackerEventTypeApi on TrackerEventType {
         'DEVICE_REMOVED' => TrackerEventType.deviceRemoved,
         'LOW_BATTERY' => TrackerEventType.lowBattery,
         'RISK_ZONE_ENTER' => TrackerEventType.riskZoneEnter,
+        'ANOMALY' => TrackerEventType.anomaly,
         _ => throw FormatException('Unknown TrackerEventType: $value'),
       };
 }

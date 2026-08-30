@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.entities import TrackerLocationRead, TrajectoryRead
+from app.schemas.entities import TrackerLocationRead, TrajectoryRead, TripHistoryRead
 from app.schemas.location import LocationCreate, LocationWatch
 from app.services.family_service import FamilyError
 from app.services.location_service import (
@@ -19,7 +21,7 @@ from app.services.location_service import (
     watch_child,
     watch_own,
 )
-from app.services.trajectory_service import child_trajectory, own_trajectory
+from app.services.trajectory_service import child_trajectory, child_trips, own_trajectory, own_trips
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 
@@ -70,13 +72,31 @@ def get_my_watch(db: Session = Depends(get_db), user: User = Depends(get_current
 
 @router.get("/me/trajectory", response_model=TrajectoryRead)
 def get_my_trajectory(
-    hours: int = Query(default=4, ge=1, le=24),
-    limit: int = Query(default=100, ge=1, le=200),
+    hours: int = Query(default=4, ge=1, le=168),
+    limit: int = Query(default=100, ge=1, le=2000),
+    period: Literal["today", "yesterday", "last_7_days"] | None = None,
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> TrajectoryRead:
     try:
-        return own_trajectory(db, user, hours=hours, limit=limit)
+        return own_trajectory(db, user, hours=hours, limit=limit, period=period, start=from_, end=to)
+    except (LocationError, FamilyError) as exc:
+        _http(exc)
+
+
+@router.get("/me/trips", response_model=TripHistoryRead)
+def get_my_trips(
+    period: Literal["today", "yesterday", "last_7_days"] | None = Query(default="today"),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+    limit: int = Query(default=1000, ge=1, le=2000),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TripHistoryRead:
+    try:
+        return own_trips(db, user, period=period, start=from_, end=to, limit=limit)
     except (LocationError, FamilyError) as exc:
         _http(exc)
 
@@ -121,12 +141,33 @@ def get_child_watch(
 @router.get("/children/{young_person_id}/trajectory", response_model=TrajectoryRead)
 def get_child_trajectory(
     young_person_id: UUID,
-    hours: int = Query(default=4, ge=1, le=24),
-    limit: int = Query(default=100, ge=1, le=200),
+    hours: int = Query(default=4, ge=1, le=168),
+    limit: int = Query(default=100, ge=1, le=2000),
+    period: Literal["today", "yesterday", "last_7_days"] | None = None,
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> TrajectoryRead:
     try:
-        return child_trajectory(db, user, young_person_id, hours=hours, limit=limit)
+        return child_trajectory(
+            db, user, young_person_id, hours=hours, limit=limit, period=period, start=from_, end=to
+        )
+    except (LocationError, FamilyError) as exc:
+        _http(exc)
+
+
+@router.get("/children/{young_person_id}/trips", response_model=TripHistoryRead)
+def get_child_trips(
+    young_person_id: UUID,
+    period: Literal["today", "yesterday", "last_7_days"] | None = Query(default="today"),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+    limit: int = Query(default=1000, ge=1, le=2000),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TripHistoryRead:
+    try:
+        return child_trips(db, user, young_person_id, period=period, start=from_, end=to, limit=limit)
     except (LocationError, FamilyError) as exc:
         _http(exc)

@@ -14,4 +14,9 @@ class NotificationScope extends InheritedNotifier<NotificationController> {
     assert(scope != null, 'NotificationScope introuvable');
     return scope!.notifier!;
   }
+
+  /// Absent hors du shell (tests de pages isolées).
+  static NotificationController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<NotificationScope>()?.notifier;
+  }
 }

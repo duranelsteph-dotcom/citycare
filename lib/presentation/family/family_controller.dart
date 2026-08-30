@@ -111,6 +111,15 @@ class FamilyController extends ChangeNotifier {
     });
   }
 
+  void applyYoungPhotoUrl(String? photoUrl) {
+    final current = youngProfile;
+    if (current == null) {
+      return;
+    }
+    youngProfile = current.copyWith(photoUrl: photoUrl);
+    notifyListeners();
+  }
+
   Future<bool> removeContact(String contactId) {
     return _run(() async {
       await _repository.deleteEmergencyContact(contactId);

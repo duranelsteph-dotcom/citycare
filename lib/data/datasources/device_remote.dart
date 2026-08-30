@@ -28,7 +28,6 @@ class DeviceRemoteDataSource {
     if (token == null || token.isEmpty) {
       throw const ApiException('Authentification requise', statusCode: 401);
     }
-    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     final headers = {
       'Accept': 'application/json',
       'Authorization': 'Bearer $token',
@@ -36,8 +35,8 @@ class DeviceRemoteDataSource {
     };
     final encoded = body == null ? null : jsonEncode(body);
     final http.Response response = await guardedHttp(() => switch (method) {
-          'POST' => _client.post(uri, headers: headers, body: encoded),
-          'DELETE' => _client.delete(uri, headers: headers, body: encoded),
+          'POST' => _client.post(ApiConfig.uri(path), headers: headers, body: encoded),
+          'DELETE' => _client.delete(ApiConfig.uri(path), headers: headers, body: encoded),
           _ => throw ArgumentError(method),
         });
     final decoded = response.body.isEmpty ? null : jsonDecode(response.body);

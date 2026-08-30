@@ -81,7 +81,7 @@ class _LocationPermissionCardState extends State<LocationPermissionCard> with Wi
         }
         final copy = LocationPermissionCopy.of(access);
         final scheme = Theme.of(context).colorScheme;
-        final accent = copy.isBlocking ? CityCareBrand.amberDark : CityCareBrand.safe;
+        final accent = copy.isBlocking ? CityCareBrand.amberDark : CityCareBrand.lime;
         final label = copy.actionLabel;
 
         return Card(

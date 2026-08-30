@@ -69,6 +69,9 @@ def link_to_read(link: GuardianLink) -> GuardianLinkRead:
             "guardian_phone": guardian.phone if guardian else None,
             "young_display_name": young.display_name if young else None,
             "young_phone": young.user.phone if young and young.user else None,
+            "young_photo_url": (
+                (young.photo_url or (young.user.photo_url if young.user else None)) if young else None
+            ),
         }
     )
 

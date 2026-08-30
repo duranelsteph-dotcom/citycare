@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -11,6 +12,7 @@ from app.db.base import Base
 from app.db.migrate import ensure_schema
 from app.db.session import engine
 from app.services.fcm_hooks import register_fcm_hooks
+from app.services.photo_service import ensure_upload_dir
 
 from app.models import *  # noqa: F403
 
@@ -31,7 +33,8 @@ def create_app() -> FastAPI:
         description=(
             "API CityCare — prévention, alerte et assistance. "
             "Le kit IoT parle à cette API, pas à Flutter. "
-            "Géolocalisation, zones, SOS, gestion des kits et télémétrie IoT. "
+            "Géolocalisation, zones, SOS, cercles nommés (par-dessus GuardianLink), "
+            "gestion des kits et télémétrie IoT. "
             "Le kit (ou le simulateur) parle à cette API, pas à Flutter. "
             "Rafraîchissement périodique de la dernière position connue (pas un GPS continu). "
             "Un SOS n'est pas un kidnapping confirmé. "
@@ -44,8 +47,18 @@ def create_app() -> FastAPI:
             "Sa cohérence avec la trajectoire est une estimation par règles, pas une preuve. "
             "L'analyse IA est une aide à la décision par règles, pas un modèle entraîné, "
             "pas un kidnapping confirmé. "
+            "Une anomalie automatique est une alerte par règles (arrêt, signal, trajectoire), "
+            "pas un modèle ML, pas un kidnapping confirmé. "
             "Les positions sont protégées par authentification et permissions. "
+            "Le login exige un 2e facteur (OTP 6 chiffres) après le mot de passe ; "
+            "le JWT n'est délivré qu'après verify-otp. En développement, otp_dev "
+            "est renvoyé (aucun SMS n'est envoyé). "
+            "Mot de passe oublié : POST /auth/forgot-password puis /auth/reset-password. "
+            "Aucun SMS ni e-mail : en développement, reset_code_dev est renvoyé. "
             "Aucun secret n'est stocké dans le code source. "
+            "Photo de profil : POST /auth/me/photo (multipart JPEG/PNG), fichiers dans static/uploads. "
+            "Suppression de compte RGPD : DELETE /auth/me avec { password }. "
+            "Anonymisation + is_active=false (pas de hard-delete : dossiers RESTRICT, cercles habités). "
             "Les notifications sont un inbox dans l'application, plus un push FCM si un jeton "
             "appareil est enregistré et si FCM_SERVICE_ACCOUNT_PATH pointe vers un compte de service. "
             "Mode hors ligne : file d'attente locale (téléphone et simulateur kit), heure conservée, pas Last Write Wins. "
@@ -70,13 +83,16 @@ def create_app() -> FastAPI:
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?" if settings.app_env == "development" else None,
+        allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept"],
     )
     application.add_middleware(SecurityHeadersMiddleware)
     application.include_router(api_router, prefix=settings.api_v1_prefix)
+    # Fichiers publics : /static/uploads/{nom}. Flutter compose avec l'origine de ApiConfig.baseUrl.
+    upload_root = ensure_upload_dir()
+    application.mount("/static", StaticFiles(directory=str(upload_root.parent)), name="static")
     return application
 
 

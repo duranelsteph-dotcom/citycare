@@ -43,13 +43,14 @@ def assert_runtime_security() -> None:
         )
 
 
-def create_access_token(*, user_id: UUID, role: str) -> str:
+def create_access_token(*, user_id: UUID, role: str, token_version: int = 0) -> str:
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {
         "sub": str(user_id),
         "role": role,
         "typ": ACCESS_TOKEN_TYPE,
+        "tv": token_version,
         "iss": settings.jwt_issuer,
         "exp": expire,
         "iat": now,

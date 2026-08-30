@@ -36,6 +36,7 @@ class UserRead(OrmModel):
     phone: str
     role: UserRole
     is_active: bool
+    photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -67,6 +68,7 @@ class GuardianLinkRead(OrmModel):
     guardian_phone: str | None = None
     young_display_name: str | None = None
     young_phone: str | None = None
+    young_photo_url: str | None = None
 
 
 class EmergencyContactRead(OrmModel):
@@ -318,6 +320,17 @@ class TrajectoryPointRead(OrmModel):
     gap_after: bool = False
 
 
+class TripRead(BaseModel):
+    """Un trajet : points regroupés (trou > 15–20 min). Pas un rapport de conduite."""
+
+    id: str
+    started_at: datetime
+    ended_at: datetime
+    distance_meters: float = 0
+    point_count: int = 0
+    points: list[TrajectoryPointRead] = Field(default_factory=list)
+
+
 class TrajectoryRead(OrmModel):
     young_person_id: UUID
     points: list[TrajectoryPointRead]
@@ -328,9 +341,31 @@ class TrajectoryRead(OrmModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     gap_threshold_seconds: int = 600
+    period: str | None = None
+    trips: list[TripRead] = Field(default_factory=list)
     disclaimer: str = (
         "Trajectoire reconstruite à partir des positions enregistrées. "
         "Ce n'est pas un suivi en direct, pas la position actuelle, "
+        "pas une trajectoire analysée ni une zone de recherche."
+    )
+
+
+class TripHistoryRead(BaseModel):
+    """Liste de trajets type Life360. Pas vitesse max, pas distraction (Phase 16)."""
+
+    young_person_id: UUID
+    access: str = "SELF"
+    period: str | None = None
+    since: datetime
+    until: datetime
+    trips: list[TripRead] = Field(default_factory=list)
+    trip_count: int = 0
+    point_count: int = 0
+    gap_threshold_seconds: int = 1080
+    disclaimer: str = (
+        "Historique de déplacements reconstruit à partir des positions enregistrées. "
+        "Ce n'est pas un suivi en direct, pas la position actuelle, "
+        "pas un rapport de conduite (vitesse max, distraction), "
         "pas une trajectoire analysée ni une zone de recherche."
     )
 

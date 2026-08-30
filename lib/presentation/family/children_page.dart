@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/enums/citycare_enums.dart';
+import '../alerts/alert_scope.dart';
 import '../auth/role_labels.dart';
 import '../cases/case_pages.dart';
 import '../location/emergency_page.dart';
+import '../location/history_page.dart';
 import '../location/location_scope.dart';
 import '../location/position_pages.dart';
+import '../map/care_status.dart';
+import '../notifications/notification_scope.dart';
 import '../trackers/kit_copy.dart';
 import '../trackers/kit_page.dart';
 import '../trackers/tracker_scope.dart';
@@ -43,15 +47,24 @@ class _ChildrenPageState extends State<ChildrenPage> {
     final family = FamilyScope.of(context);
     final kits = TrackerScope.of(context);
     final locations = LocationScope.of(context);
+    final alerts = AlertScope.maybeOf(context);
+    final inbox = NotificationScope.maybeOf(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Mes enfants / jeunes')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'children-link',
         onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LinkChildPage())),
         icon: const Icon(Icons.link),
         label: const Text('Rattacher'),
       ),
       body: ListenableBuilder(
-        listenable: Listenable.merge([family, kits, locations]),
+        listenable: Listenable.merge([
+          family,
+          kits,
+          locations,
+          if (alerts != null) alerts,
+          if (inbox != null) inbox,
+        ]),
         builder: (context, _) {
           if (family.isLoading && family.links.isEmpty) {
             return const Center(child: CircularProgressIndicator());
@@ -69,6 +82,19 @@ class _ChildrenPageState extends State<ChildrenPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(link.youngDisplayName ?? 'Jeune', style: Theme.of(context).textTheme.titleMedium),
+                      if (link.status == GuardianLinkStatus.active) ...[
+                        const SizedBox(height: 6),
+                        CareStatusBadge(
+                          status: careStatusForMember(
+                            point: locations.familyLatest[link.youngPersonId],
+                            youngPersonId: link.youngPersonId,
+                            alerts: alerts?.items ?? const [],
+                            inbox: inbox?.items ?? const [],
+                          ),
+                          compact: false,
+                          showDisclaimer: true,
+                        ),
+                      ],
                       Text(
                         '${link.youngPhone ?? ''} · ${linkStatusLabel(link.status)}'
                         '${link.status == GuardianLinkStatus.active && !link.canViewLocation ? ' · localisation non autorisée' : ''}',
@@ -118,6 +144,18 @@ class _ChildrenPageState extends State<ChildrenPage> {
                             OutlinedButton.icon(
                               onPressed: () => Navigator.of(context).push(
                                 MaterialPageRoute<void>(
+                                  builder: (_) => HistoryPage(
+                                    youngPersonId: link.youngPersonId,
+                                    displayName: link.youngDisplayName ?? 'Jeune',
+                                  ),
+                                ),
+                              ),
+                              icon: const Icon(Icons.history),
+                              label: const Text('Historique'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
                                   builder: (_) => EmergencyModePage(
                                     youngPersonId: link.youngPersonId,
                                     displayName: link.youngDisplayName ?? 'Jeune',
@@ -140,7 +178,7 @@ class _ChildrenPageState extends State<ChildrenPage> {
                               icon: const Icon(Icons.watch),
                               label: const Text('Kit'),
                             ),
-                            OutlinedButton.icon(
+                            FilledButton.icon(
                               onPressed: () => Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => SafetyZonesPage(
@@ -151,7 +189,7 @@ class _ChildrenPageState extends State<ChildrenPage> {
                                 ),
                               ),
                               icon: const Icon(Icons.shield_outlined),
-                              label: const Text('Zones'),
+                              label: const Text('Zones de sécurité'),
                             ),
                             OutlinedButton.icon(
                               onPressed: () => Navigator.of(context).push(

@@ -1,153 +1,210 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
+import '../widgets/brand_backdrop.dart';
 import '../widgets/citycare_logo.dart';
-import '../widgets/prevention_illustrations.dart';
 
-/// Écran d'accueil affiché pendant la restauration de la session.
+/// Durée exacte du splash Flutter avant Welcome / MainShell / onboarding.
+const Duration kSplashHold = Duration(seconds: 5);
+
+/// Splash violet : logo, accroche, Bienvenue, pastilles. Aucun CTA.
 ///
-/// Il porte le message de prévention plutôt qu'un simple indicateur de
-/// chargement : c'est le seul moment où l'utilisateur regarde l'écran sans
-/// avoir de tâche en cours, donc le bon moment pour rappeler la règle de base.
-///
-/// L'animation est **jouée une seule fois** (pas de boucle) : un écran de
-/// démarrage qui pulse indéfiniment retient l'attention pour rien et rend les
-/// tests d'interface instables.
+/// Après [hold] (5 s par défaut), [onFinished] est appelé. La session
+/// peut se restaurer pendant ce délai : le parent route ensuite vers
+/// MainShell, l’onboarding ou Welcome (avec les boutons).
 class SplashPage extends StatefulWidget {
-  const SplashPage({super.key, this.message});
+  const SplashPage({
+    super.key,
+    this.message,
+    this.hold = kSplashHold,
+    this.onFinished,
+  });
 
-  /// Ligne d'état affichée en bas (ex. « Restauration de votre session… »).
+  /// Texte discret en bas (ex. restauration de session).
   final String? message;
+
+  /// Délai avant [onFinished]. `Duration.zero` pour les tests widget.
+  final Duration hold;
+
+  /// Naviguer une fois le délai écoulé. Ignoré si null (aperçu visuel).
+  final VoidCallback? onFinished;
 
   @override
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 700),
-  )..forward();
+class _SplashPageState extends State<SplashPage> {
+  Timer? _timer;
 
-  late final Animation<double> _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-  late final Animation<double> _rise = Tween<double>(begin: 18, end: 0).animate(
-    CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-  );
+  @override
+  void initState() {
+    super.initState();
+    _scheduleFinished();
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _timer?.cancel();
     super.dispose();
+  }
+
+  void _scheduleFinished() {
+    final done = widget.onFinished;
+    if (done == null) {
+      return;
+    }
+    if (widget.hold == Duration.zero) {
+      // Post-frame : éviter setState pendant le premier build du parent.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          done();
+        }
+      });
+      return;
+    }
+    _timer = Timer(widget.hold, () {
+      if (mounted) {
+        done();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: isDark ? CityCareBrand.nightGradient : CityCareBrand.brandGradient,
-        ),
-        child: SafeArea(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Opacity(
-                opacity: _fade.value,
-                child: Transform.translate(offset: Offset(0, _rise.value), child: child),
-              );
-            },
+      key: const Key('splash-page'),
+      backgroundColor: CityCareBrand.violet,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const CityCareBrandBackdrop(),
+          SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: CityCareBrand.spaceLg),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Spacer(),
-                  const CityCareLogoMark(size: 108),
-                  const SizedBox(height: CityCareBrand.spaceLg),
-                  const CityCareWordmark(fontSize: 40, color: Colors.white, accentColor: Color(0xFFB9F5EE)),
+                  const Spacer(flex: 3),
+                  const CityCareLogo(
+                    axis: Axis.vertical,
+                    markSize: 112,
+                    fontSize: 34,
+                    tagline: CityCareBrand.tagline,
+                    monochromeColor: Colors.white,
+                    color: Colors.white,
+                  ),
+                  const Spacer(flex: 2),
+                  const Text(
+                    'Bienvenue',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
                   const SizedBox(height: CityCareBrand.spaceSm),
                   Text(
                     'Prévention, alerte et assistance',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.88),
+                      color: Colors.white.withValues(alpha: 0.92),
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
+                      height: 1.3,
                     ),
                   ),
                   const SizedBox(height: CityCareBrand.spaceXl),
-                  const PreventionIllustration(
-                    scene: PreventionScene.knownRoute,
-                    height: 168,
-                    onDarkSurface: true,
-                  ),
-                  const SizedBox(height: CityCareBrand.spaceLg),
-                  _SplashMessage(
-                    text: 'Un trajet connu, un adulte de confiance prévenu, '
-                        'et une alerte qui part en un seul geste.',
-                  ),
-                  const Spacer(),
-                  if (widget.message != null) ...[
-                    Text(
-                      widget.message!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
-                    ),
-                    const SizedBox(height: CityCareBrand.spaceMd),
-                  ],
-                  SizedBox(
-                    width: 140,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        minHeight: 4,
-                        backgroundColor: Colors.white.withValues(alpha: 0.22),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                  const _SplashHighlights(),
+                  const Spacer(flex: 3),
+                  if (widget.message != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: CityCareBrand.spaceLg),
+                      child: Text(
+                        widget.message!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: CityCareBrand.wordmarkLight,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: CityCareBrand.spaceXl),
                 ],
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _SplashMessage extends StatelessWidget {
-  const _SplashMessage({required this.text});
-
-  final String text;
+/// Pastilles décoratives : Prévention / Alerte SOS. Pas de navigation.
+class _SplashHighlights extends StatelessWidget {
+  const _SplashHighlights();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: CityCareBrand.spaceMd,
-        vertical: CityCareBrand.spaceSm + 2,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: CityCareBrand.borderRadiusMd,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.shield_outlined, color: Colors.white, size: 20),
-          const SizedBox(width: CityCareBrand.spaceSm),
-          Flexible(
-            child: Text(
-              text,
-              style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.35),
+    return const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _SplashPill(
+          label: 'Prévention',
+          child: Icon(Icons.shield_outlined, color: Colors.white, size: 28),
+        ),
+        SizedBox(width: 40),
+        _SplashPill(
+          label: 'Alerte SOS',
+          child: Text(
+            'SOS',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SplashPill extends StatelessWidget {
+  const _SplashPill({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 1.6),
+          ),
+          child: child,
+        ),
+        const SizedBox(height: CityCareBrand.spaceSm),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

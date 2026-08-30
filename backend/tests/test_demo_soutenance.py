@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.core.enums import UserRole
 from app.main import app
-from simulator.seed import AUTHORITY, PARENT, RELATIVE, YOUNG, play_search_act, seed_demo
+from simulator.seed import AUTHORITY, PARENT, RELATIVE, YOUNG, _complete_login, play_search_act, seed_demo
 from simulator.scenario import SCHOOL
 
 client = TestClient(app)
@@ -17,7 +17,7 @@ def _register(role: UserRole, name: str) -> dict:
     phone = f"+2377{uuid4().hex[:8]}"
     response = client.post(
         "/api/v1/auth/register",
-        json={"full_name": name, "phone": phone, "password": "motdepasse", "role": role.value},
+        json={"full_name": name, "phone": phone, "password": "VilleCare1!", "role": role.value},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -43,7 +43,7 @@ def _pair(young: dict, guardian: dict) -> dict:
 def test_health_reports_demo_version() -> None:
     health = client.get("/api/v1/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.34.0"
+    assert health.json()["version"] == "0.43.0"
     assert health.json()["status"] == "ok"
 
 
@@ -158,41 +158,73 @@ def test_demo_seed_is_idempotent() -> None:
     assert first["can_view_location"] is False
     assert first["can_trigger_alert"] is True
     assert second["can_trigger_alert"] is True
-    login = client.post("/api/v1/auth/login", json={"phone": PARENT["phone"], "password": "motdepasse"})
-    assert login.status_code == 200
-    young_login = client.post("/api/v1/auth/login", json={"phone": YOUNG["phone"], "password": "motdepasse"})
-    assert young_login.status_code == 200
-    relative_login = client.post("/api/v1/auth/login", json={"phone": RELATIVE["phone"], "password": "motdepasse"})
-    assert relative_login.status_code == 200
-    authority_login = client.post("/api/v1/auth/login", json={"phone": AUTHORITY["phone"], "password": "motdepasse"})
-    assert authority_login.status_code == 200
+    login = _complete_login(
+        client,
+        client.post("/api/v1/auth/login", json={"phone": PARENT["phone"], "password": "motdepasse"}).json(),
+    )
+    young_login = _complete_login(
+        client,
+        client.post("/api/v1/auth/login", json={"phone": YOUNG["phone"], "password": "motdepasse"}).json(),
+    )
+    relative_login = _complete_login(
+        client,
+        client.post("/api/v1/auth/login", json={"phone": RELATIVE["phone"], "password": "motdepasse"}).json(),
+    )
+    authority_login = _complete_login(
+        client,
+        client.post("/api/v1/auth/login", json={"phone": AUTHORITY["phone"], "password": "motdepasse"}).json(),
+    )
+    assert login["access_token"]
+    assert young_login["access_token"]
+    assert relative_login["access_token"]
+    assert authority_login["access_token"]
     zones = client.get(
         f"/api/v1/zones/children/{second['young_person_id']}",
-        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+        headers={"Authorization": f"Bearer {login['access_token']}"},
     )
     names = {zone["name"] for zone in zones.json()}
     assert "École" in names
     assert "Maison" in names
     risks = client.get(
         "/api/v1/risk-zones/list",
-        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+        headers={"Authorization": f"Bearer {login['access_token']}"},
     )
     assert risks.status_code == 200, risks.text
     assert "Carrefour du marché" in {zone["name"] for zone in risks.json()}
     guardians = client.get(
         "/api/v1/family/guardians",
-        headers={"Authorization": f"Bearer {young_login.json()['access_token']}"},
+        headers={"Authorization": f"Bearer {young_login['access_token']}"},
     )
     assert guardians.status_code == 200, guardians.text
     marc = next(link for link in guardians.json() if link["guardian_phone"] == RELATIVE["phone"])
     assert marc["can_trigger_alert"] is True
     received = client.get(
         "/api/v1/shares/received",
-        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+        headers={"Authorization": f"Bearer {login['access_token']}"},
     )
     assert received.status_code == 200, received.text
     active = [share for share in received.json() if share["is_active"] and share["young_person_id"] == second["young_person_id"]]
     assert active
+    circles = client.get(
+        "/api/v1/circles",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+    assert circles.status_code == 200, circles.text
+    assert "Famille Demo" in {item["name"] for item in circles.json()}
+    demo = next(item for item in circles.json() if item["name"] == "Famille Demo")
+    members = client.get(
+        f"/api/v1/circles/{demo['id']}/members",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+    assert members.status_code == 200, members.text
+    roles = {item["user_role"] for item in members.json()}
+    assert roles >= {"PARENT", "YOUNG", "RELATIVE"}
+    children = client.get(
+        "/api/v1/family/children",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+    assert children.status_code == 200
+    assert children.json()[0]["status"] == "ACTIVE"
 
 
 def test_demo_search_act_is_idempotent_not_kidnapping() -> None:

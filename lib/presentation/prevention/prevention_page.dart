@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
+import '../../app/theme.dart';
 import '../widgets/prevention_illustrations.dart';
 
 /// Conseils de prévention contre l'enlèvement d'enfants.
@@ -13,8 +14,16 @@ class PreventionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Prévention')),
+    return Theme(
+      data: CityCareTheme.light(),
+      child: Builder(
+        builder: (context) => Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: CityCareBrand.violet,
+        foregroundColor: Colors.white,
+        title: const Text('Prévention'),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           CityCareBrand.spaceMd,
@@ -24,8 +33,13 @@ class PreventionPage extends StatelessWidget {
         ),
         children: [
           Text(
+            'Lire les conseils de prévention',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: CityCareBrand.violet),
+          ),
+          const SizedBox(height: CityCareBrand.spaceXs),
+          Text(
             'Trois réflexes qui protègent',
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: CityCareBrand.violet),
           ),
           const SizedBox(height: CityCareBrand.spaceSm),
           Text(
@@ -89,6 +103,8 @@ class PreventionPage extends StatelessWidget {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 }
@@ -106,8 +122,8 @@ class _PreventionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
+      color: Colors.white,
       margin: const EdgeInsets.only(bottom: CityCareBrand.spaceMd),
       child: Padding(
         padding: const EdgeInsets.all(CityCareBrand.spaceMd),
@@ -124,9 +140,9 @@ class _PreventionSection extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Icon(Icons.check_circle, size: 16, color: scheme.secondary),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Icon(Icons.check_circle, size: 16, color: CityCareBrand.violet),
                     ),
                     const SizedBox(width: CityCareBrand.spaceSm),
                     Expanded(

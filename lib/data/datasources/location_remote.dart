@@ -26,6 +26,7 @@ class LocationRemoteDataSource {
     double? speed,
     double? heading,
     DateTime? recordedAt,
+    int? batteryLevel,
   }) async {
     return TrackerLocation.fromJson(
       await _json('POST', '/locations', body: {
@@ -36,6 +37,7 @@ class LocationRemoteDataSource {
         if (speed != null) 'speed': speed,
         if (heading != null) 'heading': heading,
         if (recordedAt != null) 'recorded_at': recordedAt.toUtc().toIso8601String(),
+        if (batteryLevel != null) 'battery_level': batteryLevel,
       }) as Map<String, dynamic>,
     );
   }
@@ -106,6 +108,40 @@ class LocationRemoteDataSource {
     );
   }
 
+  Future<TripHistory> myTrips({TripPeriod? period, DateTime? from, DateTime? to, int limit = 1000}) async {
+    return TripHistory.fromJson(
+      await _json('GET', '/locations/me/trips?${_tripsQuery(period: period, from: from, to: to, limit: limit)}')
+          as Map<String, dynamic>,
+    );
+  }
+
+  Future<TripHistory> childTrips(
+    String youngPersonId, {
+    TripPeriod? period,
+    DateTime? from,
+    DateTime? to,
+    int limit = 1000,
+  }) async {
+    return TripHistory.fromJson(
+      await _json(
+        'GET',
+        '/locations/children/$youngPersonId/trips?${_tripsQuery(period: period, from: from, to: to, limit: limit)}',
+      ) as Map<String, dynamic>,
+    );
+  }
+
+  /// Construit la query : period nommée, ou from/to ISO. Pas de vitesse max.
+  String _tripsQuery({TripPeriod? period, DateTime? from, DateTime? to, required int limit}) {
+    final params = <String, String>{'limit': '$limit'};
+    if (from != null && to != null) {
+      params['from'] = from.toUtc().toIso8601String();
+      params['to'] = to.toUtc().toIso8601String();
+    } else {
+      params['period'] = (period ?? TripPeriod.today).apiValue;
+    }
+    return params.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&');
+  }
+
   Future<EmergencySnapshot> emergency(String youngPersonId) async {
     return EmergencySnapshot.fromJson(
       await _json('GET', '/emergency/children/$youngPersonId') as Map<String, dynamic>,
@@ -117,7 +153,6 @@ class LocationRemoteDataSource {
     if (token == null || token.isEmpty) {
       throw const ApiException('Authentification requise', statusCode: 401);
     }
-    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     final headers = {
       'Accept': 'application/json',
       'Authorization': 'Bearer $token',
@@ -125,8 +160,8 @@ class LocationRemoteDataSource {
     };
     final encoded = body == null ? null : jsonEncode(body);
     final http.Response response = await guardedHttp(() => switch (method) {
-          'GET' => _client.get(uri, headers: headers),
-          'POST' => _client.post(uri, headers: headers, body: encoded),
+          'GET' => _client.get(ApiConfig.uri(path), headers: headers),
+          'POST' => _client.post(ApiConfig.uri(path), headers: headers, body: encoded),
           _ => throw ArgumentError(method),
         });
     final decoded = response.body.isEmpty ? null : jsonDecode(response.body);

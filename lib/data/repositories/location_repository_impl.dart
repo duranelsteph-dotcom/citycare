@@ -54,6 +54,22 @@ class LocationRepositoryImpl implements LocationRepository {
   }
 
   @override
+  Future<TripHistory> myTrips({TripPeriod? period, DateTime? from, DateTime? to, int limit = 1000}) {
+    return _remote.myTrips(period: period, from: from, to: to, limit: limit);
+  }
+
+  @override
+  Future<TripHistory> childTrips(
+    String youngPersonId, {
+    TripPeriod? period,
+    DateTime? from,
+    DateTime? to,
+    int limit = 1000,
+  }) {
+    return _remote.childTrips(youngPersonId, period: period, from: from, to: to, limit: limit);
+  }
+
+  @override
   Future<EmergencySnapshot> emergency(String youngPersonId) => _remote.emergency(youngPersonId);
 
   @override
@@ -65,6 +81,7 @@ class LocationRepositoryImpl implements LocationRepository {
     double? speed,
     double? heading,
     DateTime? recordedAt,
+    int? batteryLevel,
   }) {
     return _remote.publishPhoneFix(
       latitude: latitude,
@@ -74,6 +91,7 @@ class LocationRepositoryImpl implements LocationRepository {
       speed: speed,
       heading: heading,
       recordedAt: recordedAt,
+      batteryLevel: batteryLevel,
     );
   }
 }

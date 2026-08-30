@@ -9,11 +9,11 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "CityCare"
-    app_version: str = "0.34.0"
+    app_version: str = "0.43.0"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./citycare.db"
-    cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080"
+    cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080,http://10.0.2.2:8080"
     # Loaded from environment only — never commit a real secret.
     secret_key: str = "change-me-in-local-env-not-in-source"
     jwt_algorithm: str = "HS256"
@@ -26,12 +26,43 @@ class Settings(BaseSettings):
     fcm_project_id: str = ""
     login_fail_max: int = 8
     login_fail_window_seconds: int = 900
+    otp_ttl_seconds: int = 300
+    otp_resend_seconds: int = 30
+    otp_max_attempts: int = 5
+    # Reset mot de passe : code 6 chiffres, aucun SMS. TTL 15 min.
+    reset_ttl_seconds: int = 900
+    reset_max_attempts: int = 5
     # Chemin optionnel vers un artefact ML. Ignoré tant qu'aucun dataset labellisé n'existe.
     ai_model_path: str = ""
+    # Photos de profil : disque local, pas Firebase. Relatif au dossier backend/ si non absolu.
+    upload_dir: str = "static/uploads"
+    upload_max_bytes: int = 2_097_152
+
+    @property
+    def resolved_upload_dir(self):
+        from pathlib import Path
+
+        raw = Path(self.upload_dir)
+        if raw.is_absolute():
+            return raw
+        return Path(__file__).resolve().parents[2] / raw
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        """Flutter web / outils locaux : loopback, emul 10.0.2.2, LAN privee."""
+        if self.app_env != "development":
+            return None
+        return (
+            r"http://(localhost|127\.0\.0\.1|10\.0\.2\.2|"
+            r"192\.168\.\d{1,3}\.\d{1,3}|"
+            r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+            r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+            r")(:\d+)?"
+        )
 
     @property
     def is_sqlite(self) -> bool:

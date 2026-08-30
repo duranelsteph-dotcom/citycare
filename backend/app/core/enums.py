@@ -20,6 +20,13 @@ class GuardianLinkStatus(StrEnum):
     REVOKED = "REVOKED"
 
 
+class CircleRole(StrEnum):
+    """Rôle local au cercle. N'accorde aucune permission GuardianLink."""
+
+    OWNER = "OWNER"
+    MEMBER = "MEMBER"
+
+
 class AlertStatus(StrEnum):
     CREATED = "CREATED"
     ACTIVE = "ACTIVE"
@@ -67,6 +74,7 @@ class TrackerEventType(StrEnum):
     DEVICE_REMOVED = "DEVICE_REMOVED"
     LOW_BATTERY = "LOW_BATTERY"
     RISK_ZONE_ENTER = "RISK_ZONE_ENTER"
+    ANOMALY = "ANOMALY"
 
 
 class CaseStatus(StrEnum):

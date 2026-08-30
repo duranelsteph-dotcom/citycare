@@ -430,6 +430,8 @@ class Trajectory {
     this.startedAt,
     this.endedAt,
     this.gapThresholdSeconds = 600,
+    this.period,
+    this.trips = const [],
     this.disclaimer =
         'Trajectoire reconstruite à partir des positions enregistrées. Ce n’est pas un suivi en direct.',
   });
@@ -443,6 +445,8 @@ class Trajectory {
   final DateTime? startedAt;
   final DateTime? endedAt;
   final int gapThresholdSeconds;
+  final String? period;
+  final List<Trip> trips;
   final String disclaimer;
 
   factory Trajectory.fromJson(Map<String, dynamic> json) {
@@ -458,8 +462,120 @@ class Trajectory {
       startedAt: json['started_at'] == null ? null : DateTime.parse(json['started_at'] as String),
       endedAt: json['ended_at'] == null ? null : DateTime.parse(json['ended_at'] as String),
       gapThresholdSeconds: json['gap_threshold_seconds'] as int? ?? 600,
+      period: json['period'] as String?,
+      trips: (json['trips'] as List<dynamic>?)
+              ?.map((item) => Trip.fromJson(item as Map<String, dynamic>))
+              .toList() ??
+          const [],
       disclaimer: json['disclaimer'] as String? ??
           'Trajectoire reconstruite à partir des positions enregistrées. Ce n’est pas un suivi en direct.',
+    );
+  }
+}
+
+/// Filtre d’historique (chips). `custom` envoie from/to ISO, pas period=.
+enum TripPeriod { today, yesterday, last7Days, custom }
+
+extension TripPeriodApi on TripPeriod {
+  String get apiValue => switch (this) {
+        TripPeriod.today => 'today',
+        TripPeriod.yesterday => 'yesterday',
+        TripPeriod.last7Days => 'last_7_days',
+        TripPeriod.custom => 'custom',
+      };
+
+  String get chipLabel => switch (this) {
+        TripPeriod.today => 'Aujourd’hui',
+        TripPeriod.yesterday => 'Hier',
+        TripPeriod.last7Days => '7 jours',
+        TripPeriod.custom => 'Période',
+      };
+}
+
+/// Un trajet regroupé (trou > 15–20 min). Pas un rapport de conduite.
+class Trip {
+  const Trip({
+    required this.id,
+    required this.startedAt,
+    required this.endedAt,
+    required this.points,
+    this.distanceMeters = 0,
+    this.pointCount = 0,
+  });
+
+  final String id;
+  final DateTime startedAt;
+  final DateTime endedAt;
+  final double distanceMeters;
+  final int pointCount;
+  final List<TrajectoryPoint> points;
+
+  Trajectory asTrajectory(String youngPersonId) {
+    return Trajectory(
+      youngPersonId: youngPersonId,
+      points: points,
+      pointCount: pointCount,
+      distanceMeters: distanceMeters,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      disclaimer: 'Trajet reconstruit. Ce n’est pas un suivi en direct ni un rapport de conduite.',
+    );
+  }
+
+  factory Trip.fromJson(Map<String, dynamic> json) {
+    final rawPoints = json['points'] as List<dynamic>? ?? const [];
+    return Trip(
+      id: json['id'] as String,
+      startedAt: DateTime.parse(json['started_at'] as String),
+      endedAt: DateTime.parse(json['ended_at'] as String),
+      distanceMeters: (json['distance_meters'] as num?)?.toDouble() ?? 0,
+      pointCount: json['point_count'] as int? ?? rawPoints.length,
+      points: rawPoints.map((item) => TrajectoryPoint.fromJson(item as Map<String, dynamic>)).toList(),
+    );
+  }
+}
+
+class TripHistory {
+  const TripHistory({
+    required this.youngPersonId,
+    required this.trips,
+    this.access = 'SELF',
+    this.period,
+    this.since,
+    this.until,
+    this.tripCount = 0,
+    this.pointCount = 0,
+    this.gapThresholdSeconds = 1080,
+    this.disclaimer =
+        'Historique de déplacements reconstruit. Ce n’est pas un rapport de conduite.',
+  });
+
+  final String youngPersonId;
+  final String access;
+  final String? period;
+  final DateTime? since;
+  final DateTime? until;
+  final List<Trip> trips;
+  final int tripCount;
+  final int pointCount;
+  final int gapThresholdSeconds;
+  final String disclaimer;
+
+  factory TripHistory.fromJson(Map<String, dynamic> json) {
+    return TripHistory(
+      youngPersonId: json['young_person_id'] as String,
+      access: json['access'] as String? ?? 'SELF',
+      period: json['period'] as String?,
+      since: json['since'] == null ? null : DateTime.parse(json['since'] as String),
+      until: json['until'] == null ? null : DateTime.parse(json['until'] as String),
+      trips: (json['trips'] as List<dynamic>)
+          .map((item) => Trip.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      tripCount: json['trip_count'] as int? ?? 0,
+      pointCount: json['point_count'] as int? ?? 0,
+      gapThresholdSeconds: json['gap_threshold_seconds'] as int? ?? 1080,
+      disclaimer: json['disclaimer'] as String? ??
+          'Historique de déplacements reconstruit. Ce n’est pas un rapport de conduite.',
     );
   }
 }

@@ -7,6 +7,14 @@ def ensure_schema(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     statements: list[str] = []
+    if "users" in tables:
+        users = {col["name"] for col in inspector.get_columns("users")}
+        if "password_changed_at" not in users:
+            statements.append("ALTER TABLE users ADD COLUMN password_changed_at DATETIME")
+        if "token_version" not in users:
+            statements.append("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
+        if "photo_url" not in users:
+            statements.append("ALTER TABLE users ADD COLUMN photo_url VARCHAR(512)")
     if "young_persons" in tables:
         yp = {col["name"] for col in inspector.get_columns("young_persons")}
         if "pairing_code" not in yp:
@@ -27,6 +35,22 @@ def ensure_schema(engine: Engine) -> None:
         mc = {col["name"] for col in inspector.get_columns("missing_person_cases")}
         if "snapshot_json" not in mc:
             statements.append("ALTER TABLE missing_person_cases ADD COLUMN snapshot_json TEXT")
+    if "marketplace_orders" not in tables:
+        statements.append(
+            "CREATE TABLE marketplace_orders ("
+            "id CHAR(32) NOT NULL, "
+            "user_id CHAR(32) NOT NULL, "
+            "product_id VARCHAR(64) NOT NULL, "
+            "product_name VARCHAR(120) NOT NULL, "
+            "amount INTEGER NOT NULL, "
+            "currency VARCHAR(8) NOT NULL, "
+            "status VARCHAR(16) NOT NULL, "
+            "note VARCHAR(255), "
+            "created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL, "
+            "PRIMARY KEY (id)"
+            ")"
+        )
     if not statements:
         return
     with engine.begin() as connection:

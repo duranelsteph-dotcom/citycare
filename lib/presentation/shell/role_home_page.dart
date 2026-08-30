@@ -9,6 +9,9 @@ import '../auth/auth_scope.dart';
 import '../auth/role_labels.dart';
 import '../cases/case_pages.dart';
 import '../cases/case_scope.dart';
+import '../circles/circle_scope.dart';
+import '../circles/create_circle_sheet.dart';
+import '../circles/join_circle_page.dart';
 import '../family/children_page.dart';
 import '../family/family_scope.dart';
 import '../family/guardians_page.dart';
@@ -16,15 +19,17 @@ import '../family/link_child_page.dart';
 import '../family/pairing_page.dart';
 import '../family/young_profile_page.dart';
 import '../location/emergency_page.dart';
+import '../location/history_page.dart';
 import '../location/location_scope.dart';
 import '../location/position_pages.dart';
 import '../notifications/notification_scope.dart';
 import '../notifications/notifications_page.dart';
+import '../marketplace/marketplace_page.dart';
 import '../prevention/prevention_page.dart';
 import '../risk/risk_zone_pages.dart';
 import '../trackers/kit_copy.dart';
 import '../trackers/kit_page.dart';
-import '../widgets/citycare_logo.dart';
+import '../zones/parent_zones_hub.dart';
 import '../zones/zone_pages.dart';
 
 class RoleHomePage extends StatefulWidget {
@@ -51,6 +56,7 @@ class _RoleHomePageState extends State<RoleHomePage> {
       if (!mounted) {
         return;
       }
+      CircleScope.of(context).load();
       final role = AuthScope.of(context).user?.role;
       if (role == UserRole.young) {
         AlertScope.of(context).loadMineAsYoung();
@@ -60,6 +66,9 @@ class _RoleHomePageState extends State<RoleHomePage> {
         AlertScope.of(context).loadMineAsGuardian();
         CaseScope.of(context).loadMineAsGuardian();
         LocationScope.of(context).loadReceivedShares();
+      } else if (role == UserRole.authority) {
+        AlertScope.of(context).loadMineAsGuardian();
+        CaseScope.of(context).loadMineAsGuardian();
       }
     });
   }
@@ -76,32 +85,22 @@ class _RoleHomePageState extends State<RoleHomePage> {
     final locations = LocationScope.of(context);
     final cases = CaseScope.of(context);
     return Scaffold(
+      key: const Key('toutes-fonctions-page'),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        titleSpacing: CityCareBrand.spaceMd,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CityCareLogoMark(size: 30),
-            const SizedBox(width: CityCareBrand.spaceSm + 2),
-            CityCareWordmark(fontSize: 20, accentColor: Theme.of(context).colorScheme.primary),
-          ],
-        ),
+        backgroundColor: CityCareBrand.violet,
+        foregroundColor: Colors.white,
+        title: const Text('Toutes les fonctions'),
         actions: [
           IconButton(
             tooltip: 'Conseils de prévention',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const PreventionPage()),
             ),
-            icon: const Icon(Icons.menu_book_outlined),
-          ),
-          IconButton(
-            tooltip: 'Se déconnecter',
-            onPressed: auth.logout,
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.menu_book_outlined, color: Colors.white),
           ),
         ],
       ),
-      floatingActionButton: _SosFab(role: user.role),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           CityCareBrand.spaceMd,
@@ -109,10 +108,17 @@ class _RoleHomePageState extends State<RoleHomePage> {
           CityCareBrand.spaceMd,
           // Marge basse généreuse : le bouton SOS flottant ne doit jamais
           // recouvrir la dernière entrée de la liste.
-          96,
+          120,
         ),
         children: [
           _HomeHeader(user: user),
+          const SizedBox(height: CityCareBrand.spaceSm),
+          const Text(
+            key: Key('toutes-fonctions-intro'),
+            'Catalogue groupé par intention. La carte reste l’accueil. '
+            'Un SOS n’est pas un kidnapping confirmé.',
+            style: TextStyle(color: CityCareBrand.mutedText, height: 1.4, fontSize: 14),
+          ),
           const SizedBox(height: CityCareBrand.spaceMd),
           ListenableBuilder(
             listenable: Listenable.merge([locations, alerts]),
@@ -201,6 +207,54 @@ class _RoleHomePageState extends State<RoleHomePage> {
               );
             },
           ),
+          if (user.role == UserRole.authority) ...[
+            const _HomeSectionTitle('Mission autorité'),
+            _HomeTile(
+              key: const Key('role-home-authority-alerts'),
+              icon: Icons.sos,
+              accent: CityCareBrand.sos,
+              title: 'Traiter les alertes',
+              subtitle: 'SOS reçus — pas un kidnapping confirmé',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const GuardianAlertsPage(title: 'Traiter les alertes'),
+                ),
+              ),
+            ),
+            _HomeTile(
+              key: const Key('role-home-authority-cases'),
+              icon: Icons.folder_open_outlined,
+              title: 'Suivre l’évolution des dossiers',
+              subtitle: 'Statuts, recherche, clôture',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CasesPage(title: 'Évolution des dossiers'),
+                ),
+              ),
+            ),
+            _HomeTile(
+              key: const Key('role-home-authority-notices'),
+              icon: Icons.person_search,
+              title: 'Consulter les avis de recherche',
+              subtitle: 'Avis et dossiers de disparition',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CasesPage(title: 'Avis de recherche'),
+                ),
+              ),
+            ),
+          ],
+          if (user.role == UserRole.relative) ...[
+            const _HomeSectionTitle('Avis de recherche'),
+            _HomeTile(
+              key: const Key('role-home-relative-new-notice'),
+              icon: Icons.campaign_outlined,
+              accent: CityCareBrand.sos,
+              title: 'Nouveau avis de recherche',
+              subtitle: 'Déclarer une disparition — pas un kidnapping confirmé',
+              onTap: () => startMissingPersonDeclaration(context),
+            ),
+          ],
           ListenableBuilder(
             listenable: inbox,
             builder: (context, _) {
@@ -227,13 +281,23 @@ class _RoleHomePageState extends State<RoleHomePage> {
           ),
           if (user.role == UserRole.young) ...[
             const _HomeSectionTitle('Demander de l’aide'),
-            _HomeTile(
-              icon: Icons.sos,
-              accent: CityCareBrand.sos,
-              title: 'SOS',
-              subtitle: 'Demander de l’aide — pas un kidnapping confirmé',
+            _SosTile(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const SosPage()),
+              ),
+            ),
+            const _HomeSectionTitle('Cercles'),
+            _HomeTile(
+              icon: Icons.groups_outlined,
+              title: 'Créer un cercle',
+              subtitle: 'Nommer un groupe — sans remplacer les liens de confiance',
+              onTap: () => showCreateCircleSheet(context),
+            ),
+            _HomeTile(
+              icon: Icons.vpn_key_outlined,
+              title: 'Rejoindre un cercle',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const JoinCirclePage()),
               ),
             ),
             const _HomeSectionTitle('Mon kit et mon compte'),
@@ -277,6 +341,14 @@ class _RoleHomePageState extends State<RoleHomePage> {
               ),
             ),
             _HomeTile(
+              icon: Icons.history,
+              title: 'Historique des déplacements',
+              subtitle: 'Liste de trajets — pas un rapport de conduite',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const HistoryPage()),
+              ),
+            ),
+            _HomeTile(
               icon: Icons.shield_outlined,
               accent: CityCareBrand.safe,
               title: 'Mes zones de sécurité',
@@ -306,10 +378,33 @@ class _RoleHomePageState extends State<RoleHomePage> {
                 MaterialPageRoute<void>(builder: (_) => const GuardianAlertsPage()),
               ),
             ),
+            const _HomeSectionTitle('Cercles'),
+            _HomeTile(
+              icon: Icons.groups_outlined,
+              title: 'Créer un cercle',
+              subtitle: 'Nommer un groupe — sans remplacer les liens de confiance',
+              onTap: () => showCreateCircleSheet(context),
+            ),
+            _HomeTile(
+              icon: Icons.vpn_key_outlined,
+              title: 'Rejoindre un cercle',
+              subtitle: 'Code à 6 caractères',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const JoinCirclePage()),
+              ),
+            ),
             const _HomeSectionTitle('Ma famille'),
             _HomeTile(
               icon: Icons.family_restroom,
               title: 'Mes enfants / jeunes',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const ChildrenPage()),
+              ),
+            ),
+            _HomeTile(
+              icon: Icons.history,
+              title: 'Historique des déplacements',
+              subtitle: 'Trajets du jeune autorisé — pas un rapport de conduite',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const ChildrenPage()),
               ),
@@ -326,9 +421,9 @@ class _RoleHomePageState extends State<RoleHomePage> {
               icon: Icons.shield_outlined,
               accent: CityCareBrand.safe,
               title: 'Zones de sécurité',
-              subtitle: 'École, maison, jours et heures',
+              subtitle: 'Maison, école, rayon — vous les définissez',
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const ChildrenPage()),
+                MaterialPageRoute<void>(builder: (_) => const ParentZonesHubPage()),
               ),
             ),
             const _HomeSectionTitle('Disparition'),
@@ -341,6 +436,15 @@ class _RoleHomePageState extends State<RoleHomePage> {
               ),
             ),
           ],
+          const _HomeSectionTitle('Boutique'),
+          _HomeTile(
+            icon: Icons.storefront_outlined,
+            title: 'Boutique',
+            subtitle: 'Kits GPS et traceurs — prix FCFA, commande stub',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const MarketplacePage()),
+            ),
+          ),
           const _HomeSectionTitle('Comprendre et prévenir'),
           _HomeTile(
             icon: Icons.menu_book_outlined,
@@ -357,7 +461,7 @@ class _RoleHomePageState extends State<RoleHomePage> {
   }
 }
 
-/// En-tête d'accueil : identité de marque, salutation et rôle en un coup d'œil.
+/// En-tête blanc : salutation + CTA pilule verte (pas un bandeau dégradé).
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({required this.user});
 
@@ -365,46 +469,52 @@ class _HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(CityCareBrand.spaceMd + 2),
-      decoration: const BoxDecoration(
-        gradient: CityCareBrand.brandGradient,
-        borderRadius: CityCareBrand.borderRadiusLg,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const CityCareLogoMark(size: 44, monochromeColor: Colors.white),
-              const SizedBox(width: CityCareBrand.spaceMd),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Bonjour ${user.fullName}',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      roleLabel(user.role),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                    ),
-                  ],
+    final isYoung = user.role == UserRole.young;
+    final isAuthority = user.role == UserRole.authority;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Bonjour ${user.fullName}',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: CityCareBrand.titleInk),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          roleLabel(user.role),
+          style: const TextStyle(color: CityCareBrand.lime, fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+        const SizedBox(height: CityCareBrand.spaceMd),
+        Text(
+          roleHomeMessage(user.role),
+          style: const TextStyle(color: CityCareBrand.mutedText, height: 1.4, fontSize: 14),
+        ),
+        const SizedBox(height: CityCareBrand.spaceLg),
+        FilledButton.icon(
+          onPressed: () {
+            if (isAuthority) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const GuardianAlertsPage(title: 'Traiter les alertes'),
                 ),
+              );
+              return;
+            }
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => isYoung ? const MyPositionPage() : const ChildrenPage(),
               ),
-            ],
+            );
+          },
+          icon: Icon(
+            isAuthority
+                ? Icons.sos
+                : (isYoung ? Icons.map_outlined : Icons.family_restroom),
           ),
-          const SizedBox(height: CityCareBrand.spaceMd),
-          Text(
-            roleHomeMessage(user.role),
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.92), height: 1.4, fontSize: 14),
+          label: Text(
+            isAuthority ? 'Traiter les alertes' : (isYoung ? 'Ouvrir la carte' : 'Voir les enfants'),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -437,10 +547,10 @@ class _HomeSectionTitle extends StatelessWidget {
   }
 }
 
-/// Entrée de navigation de l'accueil : grande cible tactile, icône colorée
-/// selon la gravité, sous-titre qui dit ce que la fonction ne fait pas.
+/// Tuile Benskin : fond blanc, bordure grise, icône verte, pas d’ombre.
 class _HomeTile extends StatelessWidget {
   const _HomeTile({
+    super.key,
     required this.icon,
     required this.title,
     this.subtitle,
@@ -458,64 +568,62 @@ class _HomeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = accent ?? scheme.primary;
-    final leading = Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: CityCareBrand.borderRadiusSm,
-      ),
-      child: Icon(icon, color: color, size: 22),
-    );
+    final color = accent ?? CityCareBrand.lime;
+    final leading = Icon(icon, color: color, size: 26);
     final text = subtitle;
-    return Card(
-      child: ListTile(
-        leading: badgeCount > 0
-            ? Badge(label: Text('$badgeCount'), child: leading)
-            : leading,
-        title: Text(title),
-        subtitle: text == null ? null : Text(text),
-        trailing: Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
-        onTap: onTap,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: CityCareBrand.spaceSm),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: CityCareBrand.borderRadiusSm,
+          side: const BorderSide(color: CityCareBrand.tileBorder),
+        ),
+        child: ListTile(
+          leading: badgeCount > 0 ? Badge(label: Text('$badgeCount'), child: leading) : leading,
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, color: CityCareBrand.titleInk)),
+          subtitle: text == null ? null : Text(text, style: const TextStyle(color: CityCareBrand.mutedText, fontSize: 13)),
+          trailing: const Icon(Icons.chevron_right, color: CityCareBrand.mutedText),
+          onTap: onTap,
+        ),
       ),
     );
   }
 }
 
-/// Bouton d'urgence flottant.
-///
-/// Il reste visible pendant le défilement : en situation de panique, on ne
-/// doit pas avoir à chercher où appuyer. Le libellé diffère du titre des
-/// entrées de liste pour ne pas créer deux cibles portant le même nom.
-class _SosFab extends StatelessWidget {
-  const _SosFab({required this.role});
+/// Tuile SOS : seule exception rouge, inratable, même libellé « SOS ».
+class _SosTile extends StatelessWidget {
+  const _SosTile({required this.onTap});
 
-  final UserRole role;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (role == UserRole.young) {
-      return FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const SosPage()),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: CityCareBrand.spaceSm),
+      child: Material(
+        color: CityCareBrand.sos,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.sos, color: Colors.white, size: 28),
+                SizedBox(width: 12),
+                Text(
+                  'SOS',
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
         ),
-        icon: const Icon(Icons.sos, size: 28),
-        label: const Text('Alerte SOS'),
-        tooltip: 'Demander de l’aide immédiatement',
-      );
-    }
-    if (role == UserRole.parent || role == UserRole.relative) {
-      return FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const GuardianAlertsPage()),
-        ),
-        icon: const Icon(Icons.notifications_active_outlined, size: 26),
-        label: const Text('Voir les alertes'),
-        tooltip: 'Demandes d’aide reçues',
-      );
-    }
-    return const SizedBox.shrink();
+      ),
+    );
   }
 }
+

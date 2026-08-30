@@ -12,7 +12,7 @@ def _register(role: UserRole, name: str) -> dict:
     phone = f"+2377{uuid4().hex[:8]}"
     response = client.post(
         "/api/v1/auth/register",
-        json={"full_name": name, "phone": phone, "password": "motdepasse", "role": role.value},
+        json={"full_name": name, "phone": phone, "password": "VilleCare1!", "role": role.value},
     )
     assert response.status_code == 200, response.text
     body = response.json()

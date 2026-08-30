@@ -18,7 +18,11 @@ class AlertRemoteDataSource {
   final http.Client _client;
 
   Future<Alert> triggerSos(SosDraft draft) async {
-    return Alert.fromJson(await _json('POST', '/alerts/sos', body: draft.toJson()) as Map<String, dynamic>);
+    return Alert.fromJson(
+      await withOneRetry(
+        () => _json('POST', '/alerts/sos', body: draft.toJson()),
+      ) as Map<String, dynamic>,
+    );
   }
 
   Future<List<Alert>> mineAsYoung() async {
@@ -52,7 +56,6 @@ class AlertRemoteDataSource {
     if (token == null || token.isEmpty) {
       throw const ApiException('Authentification requise', statusCode: 401);
     }
-    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
     final headers = {
       'Accept': 'application/json',
       'Authorization': 'Bearer $token',
@@ -60,8 +63,8 @@ class AlertRemoteDataSource {
     };
     final encoded = body == null ? null : jsonEncode(body);
     final http.Response response = await guardedHttp(() => switch (method) {
-          'GET' => _client.get(uri, headers: headers),
-          'POST' => _client.post(uri, headers: headers, body: encoded),
+          'GET' => _client.get(ApiConfig.uri(path), headers: headers),
+          'POST' => _client.post(ApiConfig.uri(path), headers: headers, body: encoded),
           _ => throw ArgumentError(method),
         });
     final decoded = response.body.isEmpty ? null : jsonDecode(response.body);

@@ -32,8 +32,8 @@ class LocationPermissionCopy {
       case LocationAccessStatus.granted:
         return const LocationPermissionCopy(
           title: 'Localisation autorisée',
-          message: 'CityCare peut relever la position de ce téléphone lorsque vous le demandez. '
-              'Ce n’est pas un suivi en arrière-plan.',
+          message: 'CityCare peut relever la position de ce téléphone. '
+              'Le suivi en arrière-plan n’est actif que si vous l’avez autorisé dans Profil.',
           actionLabel: null,
           icon: Icons.check_circle_outline,
           isBlocking: false,

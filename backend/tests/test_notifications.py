@@ -16,7 +16,7 @@ def _register(role: UserRole, name: str) -> dict:
     phone = f"+2377{uuid4().hex[:8]}"
     response = client.post(
         "/api/v1/auth/register",
-        json={"full_name": name, "phone": phone, "password": "motdepasse", "role": role.value},
+        json={"full_name": name, "phone": phone, "password": "VilleCare1!", "role": role.value},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -42,7 +42,7 @@ def _pair(young: dict, parent: dict) -> dict:
 def test_health_reports_notification_phase_version() -> None:
     health = client.get("/api/v1/health")
     assert health.status_code == 200
-    assert health.json()["version"] == "0.34.0"
+    assert health.json()["version"] == "0.43.0"
 
 
 def test_geofence_notification_is_contextual_in_app_not_push() -> None:

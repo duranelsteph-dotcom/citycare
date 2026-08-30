@@ -2,18 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'brand.dart';
 
-/// Thèmes clair et sombre de CityCare.
+/// Thèmes clair et sombre de CityCare : violet, blanc, SOS rouge.
 ///
-/// Les deux thèmes partagent la même grammaire visuelle : même hiérarchie
-/// typographique, mêmes rayons, mêmes cibles tactiles. Seules les surfaces
-/// changent, pour qu'un écran appris en plein jour reste reconnaissable la nuit.
+/// AppBar violette à titre centré, boutons pilule, tuiles bordées,
+/// indicateur de navigation lavande. Le SOS reste rouge.
 class CityCareTheme {
   const CityCareTheme._();
 
-  /// Thème clair — utilisé par défaut.
   static ThemeData light() => _build(Brightness.light);
 
-  /// Thème sombre — utile la nuit, moment où une disparition est signalée.
   static ThemeData dark() => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
@@ -21,37 +18,38 @@ class CityCareTheme {
     final scheme = _scheme(brightness);
     final base = ThemeData(brightness: brightness, colorScheme: scheme, useMaterial3: true);
 
+    final fieldFill = isDark ? Colors.white.withValues(alpha: 0.06) : CityCareBrand.fieldFill;
+    final tileSide = BorderSide(color: isDark ? scheme.outlineVariant : CityCareBrand.tileBorder);
+
     return base.copyWith(
+      // InkSparkle (M3) casse `flutter test` sur Windows (shader ink_sparkle.frag).
+      splashFactory: InkRipple.splashFactory,
       scaffoldBackgroundColor: isDark ? CityCareBrand.darkBackground : CityCareBrand.lightBackground,
       textTheme: _textTheme(base.textTheme, scheme),
       appBarTheme: AppBarTheme(
-        backgroundColor: isDark ? CityCareBrand.darkSurface : CityCareBrand.lightSurface,
-        foregroundColor: scheme.onSurface,
+        backgroundColor: isDark ? CityCareBrand.darkSurface : CityCareBrand.violet,
+        foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 2,
-        centerTitle: false,
-        titleTextStyle: TextStyle(
-          color: scheme.onSurface,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: const TextStyle(
+          color: Colors.white,
           fontSize: 20,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.1,
+          fontWeight: FontWeight.w600,
         ),
       ),
       cardTheme: CardThemeData(
         color: scheme.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: isDark ? 0 : 1.5,
-        shadowColor: Colors.black.withValues(alpha: isDark ? 0 : 0.12),
+        elevation: 0,
         margin: const EdgeInsets.symmetric(vertical: CityCareBrand.spaceSm / 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: CityCareBrand.borderRadiusMd,
-          side: BorderSide(color: scheme.outlineVariant, width: isDark ? 1 : 0.6),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusSm, side: tileSide),
       ),
       listTileTheme: ListTileThemeData(
-        iconColor: scheme.primary,
-        shape: const RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusMd),
+        iconColor: CityCareBrand.violet,
+        shape: const RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusSm),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: CityCareBrand.spaceMd,
           vertical: CityCareBrand.spaceXs,
@@ -70,68 +68,95 @@ class CityCareTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: CityCareBrand.violet,
+          foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(CityCareBrand.touchTargetHeight),
-          shape: const RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusSm),
+          shape: CityCareBrand.stadium,
+          elevation: 0,
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: CityCareBrand.violet,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(CityCareBrand.touchTargetHeight),
+          shape: CityCareBrand.stadium,
+          elevation: 0,
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
+          foregroundColor: CityCareBrand.violet,
           minimumSize: const Size.fromHeight(48),
-          shape: const RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusSm),
-          side: BorderSide(color: scheme.outline),
+          shape: CityCareBrand.stadium,
+          side: const BorderSide(color: CityCareBrand.violet, width: 2),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          foregroundColor: CityCareBrand.violet,
           minimumSize: const Size(64, 44),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: CityCareBrand.violet,
+        selectionColor: CityCareBrand.lavender,
+        selectionHandleColor: CityCareBrand.violet,
+      ),
       inputDecorationTheme: InputDecorationThemeData(
         filled: true,
-        fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+        fillColor: fieldFill,
+        prefixIconColor: CityCareBrand.violet,
+        suffixIconColor: CityCareBrand.violet,
+        labelStyle: TextStyle(color: isDark ? scheme.onSurfaceVariant : CityCareBrand.titleInk),
+        hintStyle: TextStyle(color: isDark ? scheme.onSurfaceVariant : const Color(0xFF757575)),
+        floatingLabelStyle: const TextStyle(color: CityCareBrand.violet, fontWeight: FontWeight.w600),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: CityCareBrand.spaceMd,
           vertical: CityCareBrand.spaceMd,
         ),
         border: OutlineInputBorder(
-          borderRadius: CityCareBrand.borderRadiusSm,
-          borderSide: BorderSide(color: scheme.outline),
+          borderRadius: CityCareBrand.borderRadiusLg,
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: CityCareBrand.borderRadiusSm,
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: CityCareBrand.borderRadiusLg,
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: CityCareBrand.borderRadiusSm,
-          borderSide: BorderSide(color: scheme.primary, width: 2),
+          borderRadius: CityCareBrand.borderRadiusLg,
+          borderSide: const BorderSide(color: CityCareBrand.violet, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: CityCareBrand.borderRadiusSm,
+          borderRadius: CityCareBrand.borderRadiusLg,
           borderSide: BorderSide(color: scheme.error, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: CityCareBrand.borderRadiusSm,
+          borderRadius: CityCareBrand.borderRadiusLg,
           borderSide: BorderSide(color: scheme.error, width: 2),
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: scheme.surfaceContainerHighest,
-        side: BorderSide(color: scheme.outlineVariant),
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(999))),
+        backgroundColor: scheme.surface,
+        selectedColor: CityCareBrand.violet.withValues(alpha: 0.12),
+        side: tileSide,
+        shape: const StadiumBorder(),
         labelStyle: TextStyle(color: scheme.onSurface, fontSize: 13, fontWeight: FontWeight.w600),
         padding: const EdgeInsets.symmetric(horizontal: CityCareBrand.spaceSm, vertical: 6),
       ),
       dividerTheme: DividerThemeData(color: scheme.outlineVariant, space: 1, thickness: 1),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: const RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusSm),
+        shape: CityCareBrand.stadium,
         contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 15),
       ),
       dialogTheme: const DialogThemeData(
-        shape: RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusMd),
+        backgroundColor: CityCareBrand.lavender,
+        shape: RoundedRectangleBorder(borderRadius: CityCareBrand.borderRadiusXl),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         shape: RoundedRectangleBorder(
@@ -141,11 +166,30 @@ class CityCareTheme {
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: CityCareBrand.sos,
         foregroundColor: Colors.white,
-        elevation: 6,
+        elevation: 3,
+        shape: CityCareBrand.stadium,
         extendedTextStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.5),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: scheme.primary,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: isDark ? CityCareBrand.darkSurface : Colors.white,
+        elevation: 0,
+        indicatorColor: CityCareBrand.lavender,
+        indicatorShape: const StadiumBorder(),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? CityCareBrand.violet : CityCareBrand.mutedText,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(color: selected ? CityCareBrand.violet : CityCareBrand.mutedText);
+        }),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: CityCareBrand.violet,
         linearMinHeight: 3,
       ),
       badgeTheme: const BadgeThemeData(
@@ -158,16 +202,16 @@ class CityCareTheme {
   static ColorScheme _scheme(Brightness brightness) {
     if (brightness == Brightness.dark) {
       return const ColorScheme.dark(
-        primary: Color(0xFF9DBBFA),
-        onPrimary: Color(0xFF04214F),
-        primaryContainer: Color(0xFF17408F),
-        onPrimaryContainer: Color(0xFFDCE6FF),
-        secondary: Color(0xFF5FD6C7),
-        onSecondary: Color(0xFF00332E),
+        primary: Color(0xFFCE93D8),
+        onPrimary: Color(0xFF4A148C),
+        primaryContainer: Color(0xFF6A1B9A),
+        onPrimaryContainer: Color(0xFFF3E5F5),
+        secondary: Color(0xFFE1BEE7),
+        onSecondary: Color(0xFF4A148C),
         secondaryContainer: CityCareBrand.secondaryDark,
-        onSecondaryContainer: Color(0xFFD3FFF8),
-        tertiary: Color(0xFFFFC46B),
-        onTertiary: Color(0xFF3E2600),
+        onSecondaryContainer: Color(0xFFF3E5F5),
+        tertiary: CityCareBrand.lavender,
+        onTertiary: Color(0xFF4A148C),
         tertiaryContainer: CityCareBrand.amberDark,
         onTertiaryContainer: Color(0xFFFFE7C2),
         error: Color(0xFFFF8A83),
@@ -175,45 +219,43 @@ class CityCareTheme {
         errorContainer: CityCareBrand.sosDark,
         onErrorContainer: Color(0xFFFFDAD7),
         surface: CityCareBrand.darkSurface,
-        onSurface: Color(0xFFE6EBF5),
-        surfaceContainerHighest: Color(0xFF20293B),
-        onSurfaceVariant: Color(0xFFAFBACD),
-        outline: Color(0xFF5C6879),
-        outlineVariant: Color(0xFF2C374A),
-        inverseSurface: Color(0xFFE6EBF5),
-        onInverseSurface: Color(0xFF161E2C),
+        onSurface: Color(0xFFF3E5F5),
+        surfaceContainerHighest: Color(0xFF3D1A5C),
+        onSurfaceVariant: Color(0xFFCEB3D9),
+        outline: Color(0xFF8E6AA3),
+        outlineVariant: Color(0xFF4A2A62),
+        inverseSurface: Color(0xFFF3E5F5),
+        onInverseSurface: Color(0xFF2A1248),
       );
     }
     return const ColorScheme.light(
-      primary: CityCareBrand.primary,
+      primary: CityCareBrand.violet,
       onPrimary: Colors.white,
-      primaryContainer: Color(0xFFDCE6FF),
-      onPrimaryContainer: Color(0xFF04214F),
-      secondary: CityCareBrand.secondary,
+      primaryContainer: CityCareBrand.lavender,
+      onPrimaryContainer: Color(0xFF4A148C),
+      secondary: CityCareBrand.primaryLight,
       onSecondary: Colors.white,
-      secondaryContainer: Color(0xFFCFF5F0),
-      onSecondaryContainer: Color(0xFF00332E),
+      secondaryContainer: Color(0xFFF3E5F5),
+      onSecondaryContainer: Color(0xFF4A148C),
       tertiary: CityCareBrand.amberDark,
       onTertiary: Colors.white,
-      tertiaryContainer: Color(0xFFFFEBCB),
+      tertiaryContainer: Color(0xFFFFF3C4),
       onTertiaryContainer: Color(0xFF3E2600),
       error: Color(0xFFC1211C),
       onError: Colors.white,
       errorContainer: Color(0xFFFFDAD7),
       onErrorContainer: Color(0xFF5B0F0C),
-      surface: CityCareBrand.lightSurface,
-      onSurface: Color(0xFF141A24),
-      surfaceContainerHighest: Color(0xFFEDF1F8),
-      onSurfaceVariant: Color(0xFF4E5865),
-      outline: Color(0xFF8B96A5),
-      outlineVariant: Color(0xFFD8DFE9),
-      inverseSurface: Color(0xFF232B36),
-      onInverseSurface: Color(0xFFF2F5FA),
+      surface: Colors.white,
+      onSurface: CityCareBrand.titleInk,
+      surfaceContainerHighest: CityCareBrand.fieldFill,
+      onSurfaceVariant: Color(0xFF616161),
+      outline: Color(0xFFBDBDBD),
+      outlineVariant: CityCareBrand.tileBorder,
+      inverseSurface: Color(0xFF2E2E2E),
+      onInverseSurface: Color(0xFFF5F5F5),
     );
   }
 
-  /// Typographie : titres denses et lisibles, corps de texte aéré (hauteur de
-  /// ligne 1.4) car beaucoup d'écrans portent des avertissements à lire vite.
   static TextTheme _textTheme(TextTheme base, ColorScheme scheme) {
     return base.copyWith(
       displaySmall: base.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5),

@@ -11,6 +11,7 @@ abstract class LocationRepository {
     double? speed,
     double? heading,
     DateTime? recordedAt,
+    int? batteryLevel,
   });
 
   Future<TrackerLocation> myLatest();
@@ -36,6 +37,16 @@ abstract class LocationRepository {
   Future<Trajectory> myTrajectory({int hours = 4, int limit = 100});
 
   Future<Trajectory> childTrajectory(String youngPersonId, {int hours = 4, int limit = 100});
+
+  Future<TripHistory> myTrips({TripPeriod? period, DateTime? from, DateTime? to, int limit = 1000});
+
+  Future<TripHistory> childTrips(
+    String youngPersonId, {
+    TripPeriod? period,
+    DateTime? from,
+    DateTime? to,
+    int limit = 1000,
+  });
 
   Future<EmergencySnapshot> emergency(String youngPersonId);
 }

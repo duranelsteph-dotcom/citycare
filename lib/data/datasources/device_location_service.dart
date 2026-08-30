@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../domain/entities/background_share.dart';
 import '../../domain/entities/location_access.dart';
 
 class DeviceLocationException implements Exception {
@@ -14,6 +16,62 @@ class DeviceLocationException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Charge utile POST /locations — horodatage GPS conservé (pas Last Write Wins).
+///
+/// [batteryLevel] : batterie téléphone lue au moment du fix. Absente si null
+/// (lecture ratée) — on n’envoie jamais un 100 % inventé.
+Map<String, dynamic> phoneFixPayload(Position fix, {int? batteryLevel}) {
+  return {
+    'latitude': fix.latitude,
+    'longitude': fix.longitude,
+    'accuracy': fix.accuracy,
+    'altitude': fix.altitude,
+    'speed': (fix.speed.isNaN || fix.speed < 0) ? null : fix.speed,
+    'heading': (fix.heading.isNaN || fix.heading < 0) ? null : fix.heading,
+    'recorded_at': fix.timestamp.toUtc().toIso8601String(),
+    if (batteryLevel != null) 'battery_level': batteryLevel,
+  };
+}
+
+/// Réglages du flux GPS arrière-plan (filtre 40 m, service premier plan Android).
+///
+/// iOS : `allowBackgroundLocationUpdates` + `UIBackgroundModes` location.
+/// Sans la capability « Background Modes → Location updates » cochée dans
+/// Xcode, le flux iOS peut s’arrêter à la mise en arrière-plan.
+LocationSettings backgroundLocationSettings({
+  TargetPlatform? platform,
+}) {
+  final target = platform ?? defaultTargetPlatform;
+  if (target == TargetPlatform.android) {
+    return AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: kBackgroundDistanceFilterMeters,
+      intervalDuration: kBackgroundAndroidInterval,
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: 'CityCare',
+        notificationText: kBackgroundNotificationText,
+        notificationChannelName: 'Partage de position',
+        setOngoing: true,
+        enableWakeLock: true,
+      ),
+    );
+  }
+  if (target == TargetPlatform.iOS || target == TargetPlatform.macOS) {
+    return AppleSettings(
+      accuracy: LocationAccuracy.high,
+      activityType: ActivityType.otherNavigation,
+      distanceFilter: kBackgroundDistanceFilterMeters,
+      pauseLocationUpdatesAutomatically: true,
+      showBackgroundLocationIndicator: true,
+      allowBackgroundLocationUpdates: true,
+    );
+  }
+  return const LocationSettings(
+    accuracy: LocationAccuracy.high,
+    distanceFilter: kBackgroundDistanceFilterMeters,
+  );
 }
 
 /// GPS du téléphone (pas du kit IoT).
@@ -54,6 +112,30 @@ class DeviceLocationService {
     }
   }
 
+  /// Demande « toujours » après « pendant l’utilisation » (Android 10+ / iOS).
+  ///
+  /// Deux étapes : d’abord la permission premier plan, puis une seconde
+  /// demande pour ACCESS_BACKGROUND_LOCATION. Si le système refuse encore,
+  /// seul un passage par les réglages débloque.
+  Future<LocationAccess> requestBackgroundAccess() async {
+    final first = await requestAccess();
+    if (!first.isGranted) {
+      return first;
+    }
+    if (first.isAlways) {
+      return first;
+    }
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return const LocationAccess(LocationAccessStatus.serviceDisabled);
+      }
+      final permission = await Geolocator.requestPermission();
+      return _map(permission);
+    } catch (_) {
+      return first;
+    }
+  }
+
   /// Ouvre les réglages de l'application (cas du refus définitif).
   Future<bool> openAppSettings() async {
     try {
@@ -89,10 +171,17 @@ class DeviceLocationService {
     );
   }
 
+  /// Flux GPS réel (getPositionStream). Pas un Timer qui invente des points.
+  ///
+  /// Android : service premier plan + notification persistante.
+  Stream<Position> watchPositions() {
+    return Geolocator.getPositionStream(locationSettings: backgroundLocationSettings());
+  }
+
   LocationAccess _map(LocationPermission permission) {
     switch (permission) {
       case LocationPermission.always:
-        return const LocationAccess(LocationAccessStatus.granted);
+        return const LocationAccess(LocationAccessStatus.granted, isAlways: true);
       case LocationPermission.whileInUse:
         return const LocationAccess(LocationAccessStatus.granted);
       case LocationPermission.denied:

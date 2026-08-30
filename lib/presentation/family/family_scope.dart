@@ -14,4 +14,8 @@ class FamilyScope extends InheritedNotifier<FamilyController> {
     assert(scope != null, 'FamilyScope introuvable');
     return scope!.notifier!;
   }
+
+  static FamilyController? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<FamilyScope>()?.notifier;
+  }
 }

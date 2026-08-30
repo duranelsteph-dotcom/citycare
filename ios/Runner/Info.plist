@@ -70,11 +70,23 @@
 	<string>$(CITYCARE_MAPS_API_KEY)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CityCare utilise votre position pour l’afficher sur la carte, vérifier vos zones de sécurité et la joindre à un SOS. Elle n’est partagée qu’avec les personnes que vous autorisez.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>CityCare peut relever votre position en arrière-plan pour un SOS, les zones de sécurité et les proches que vous avez autorisés. Ce n’est actif que si vous allumez « Partage en arrière-plan ».</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>CityCare peut relever votre position en arrière-plan pour un SOS, les zones de sécurité et les proches que vous avez autorisés. Ce n’est actif que si vous allumez « Partage en arrière-plan ».</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>CityCarePreciseLocation</key>
 		<string>Une position précise permet de savoir si l’enfant est réellement dans sa zone de sécurité plutôt qu’à proximité.</string>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>CityCare utilise l’appareil photo uniquement pour votre photo de profil, après votre action.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CityCare accède à vos photos uniquement pour choisir une photo de profil, après votre action.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>CityCare utilise le micro uniquement pour un SOS vocal (« au secours » / « à l’aide »), après votre action.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

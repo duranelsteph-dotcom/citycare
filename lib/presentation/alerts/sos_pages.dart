@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/brand.dart';
 import '../../data/datasources/voice_sos_service.dart';
 import '../../domain/entities/alerts.dart';
 import '../../domain/entities/identity.dart';
@@ -41,6 +42,7 @@ class _SosPageState extends State<SosPage> {
             children: [
               if (alerts.isBusy) const LinearProgressIndicator(),
               const Text(
+                key: Key('sos-disclaimer'),
                 'Le SOS est une demande d’aide, depuis l’application, la voix du téléphone, ou le kit IoT. '
                 'Ce n’est pas un kidnapping confirmé. Inbox plus notification push FCM si Firebase est configuré.',
               ),
@@ -54,8 +56,10 @@ class _SosPageState extends State<SosPage> {
               else ...[
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    minimumSize: const Size.fromHeight(64),
+                    backgroundColor: CityCareBrand.sos,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(72),
+                    shape: CityCareBrand.stadium,
                   ),
                   onPressed: alerts.isBusy ? null : () => _confirmAndSend(context),
                   child: Text(alerts.isBusy ? 'Envoi…' : 'Déclencher un SOS'),
@@ -172,7 +176,9 @@ class _SosPageState extends State<SosPage> {
 }
 
 class GuardianAlertsPage extends StatefulWidget {
-  const GuardianAlertsPage({super.key});
+  const GuardianAlertsPage({super.key, this.title});
+
+  final String? title;
 
   @override
   State<GuardianAlertsPage> createState() => _GuardianAlertsPageState();
@@ -184,7 +190,9 @@ class _GuardianAlertsPageState extends State<GuardianAlertsPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AlertScope.of(context).loadMineAsGuardian();
-      FamilyScope.of(context).loadForGuardian();
+      if (AuthScope.of(context).user?.role != UserRole.authority) {
+        FamilyScope.of(context).loadForGuardian();
+      }
     });
   }
 
@@ -192,16 +200,21 @@ class _GuardianAlertsPageState extends State<GuardianAlertsPage> {
   Widget build(BuildContext context) {
     final alerts = AlertScope.of(context);
     final family = FamilyScope.of(context);
+    final isAuthority = AuthScope.of(context).user?.role == UserRole.authority;
     return Scaffold(
-      appBar: AppBar(title: const Text('Alertes SOS')),
+      appBar: AppBar(title: Text(widget.title ?? (isAuthority ? 'Traiter les alertes' : 'Alertes SOS'))),
       floatingActionButton: ListenableBuilder(
         listenable: family,
         builder: (context, _) {
+          if (isAuthority) {
+            return const SizedBox.shrink();
+          }
           final canTrigger = family.active.where((link) => link.canTriggerAlert).toList();
           if (canTrigger.isEmpty) {
             return const SizedBox.shrink();
           }
           return FloatingActionButton.extended(
+            heroTag: 'guardian-relative-sos',
             onPressed: alerts.isBusy ? null : () => _relativeSos(context, canTrigger),
             icon: const Icon(Icons.sos),
             label: const Text('Signaler un danger'),
@@ -211,29 +224,42 @@ class _GuardianAlertsPageState extends State<GuardianAlertsPage> {
       body: ListenableBuilder(
         listenable: alerts,
         builder: (context, _) {
+          final Widget content;
           if (alerts.isBusy && alerts.items.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            content = const Center(child: CircularProgressIndicator());
+          } else if (alerts.errorMessage != null && alerts.items.isEmpty) {
+            content = Center(child: Text(alerts.errorMessage!));
+          } else if (alerts.items.isEmpty) {
+            content = const Center(child: Text('Aucun SOS pour le moment.'));
+          } else {
+            content = ListView(
+              children: alerts.items.map((alert) {
+                return ListTile(
+                  leading: Icon(
+                    Icons.sos,
+                    color: alert.isOpen ? Theme.of(context).colorScheme.error : null,
+                  ),
+                  title: Text(alert.youngDisplayName ?? 'Jeune'),
+                  subtitle: Text('${alertStatusLabel(alert.status)} · ${alert.triggeredAt.toLocal()}'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => SosDetailPage(alertId: alert.id)),
+                  ),
+                );
+              }).toList(),
+            );
           }
-          if (alerts.errorMessage != null && alerts.items.isEmpty) {
-            return Center(child: Text(alerts.errorMessage!));
-          }
-          if (alerts.items.isEmpty) {
-            return const Center(child: Text('Aucun SOS pour le moment.'));
-          }
-          return ListView(
-            children: alerts.items.map((alert) {
-              return ListTile(
-                leading: Icon(
-                  Icons.sos,
-                  color: alert.isOpen ? Theme.of(context).colorScheme.error : null,
+          return Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Text(
+                  key: Key('sos-disclaimer'),
+                  'Demandes d’aide reçues. Ce n’est pas un kidnapping confirmé. '
+                  'Inbox dans l’application, plus un push FCM si un jeton appareil est enregistré.',
                 ),
-                title: Text(alert.youngDisplayName ?? 'Jeune'),
-                subtitle: Text('${alertStatusLabel(alert.status)} · ${alert.triggeredAt.toLocal()}'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => SosDetailPage(alertId: alert.id)),
-                ),
-              );
-            }).toList(),
+              ),
+              Expanded(child: content),
+            ],
           );
         },
       ),

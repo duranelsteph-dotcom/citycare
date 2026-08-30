@@ -108,6 +108,8 @@ def _load_alert(db: Session, alert_id: UUID) -> Alert:
 
 
 def _assert_can_view(db: Session, user: User, alert: Alert) -> None:
+    if user.role == UserRole.AUTHORITY:
+        return
     if user.role == UserRole.YOUNG:
         _require_owner(user, alert)
         return
@@ -375,9 +377,24 @@ def list_own(db: Session, user: User) -> list[AlertRead]:
     return [to_read(row) for row in rows]
 
 
+def list_for_authority(db: Session, user: User) -> list[AlertRead]:
+    if user.role != UserRole.AUTHORITY:
+        raise AlertError("Réservé à l’autorité", 403)
+    rows = (
+        db.query(Alert)
+        .options(joinedload(Alert.young_person))
+        .order_by(Alert.triggered_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [to_read(row) for row in rows]
+
+
 def list_for_guardian(db: Session, user: User) -> list[AlertRead]:
+    if user.role == UserRole.AUTHORITY:
+        return list_for_authority(db, user)
     if user.role not in {UserRole.PARENT, UserRole.RELATIVE}:
-        raise AlertError("Réservé au parent ou au proche autorisé", 403)
+        raise AlertError("Réservé au parent, au proche ou à l’autorité", 403)
     young_ids = [
         row[0]
         for row in (
@@ -436,7 +453,8 @@ def cancel_sos(db: Session, user: User, alert_id: UUID) -> AlertRead:
 
 def acknowledge_sos(db: Session, user: User, alert_id: UUID) -> AlertRead:
     alert = _load_alert(db, alert_id)
-    _guardian_link(db, user, alert.young_person_id)
+    if user.role != UserRole.AUTHORITY:
+        _guardian_link(db, user, alert.young_person_id)
     if alert.status not in OPEN_STATUSES:
         raise AlertError("Cette alerte n'est plus ouverte", 409)
     if alert.status == AlertStatus.ACKNOWLEDGED:
@@ -460,11 +478,12 @@ def resolve_sos(db: Session, user: User, alert_id: UUID) -> AlertRead:
     alert = _load_alert(db, alert_id)
     if user.role == UserRole.YOUNG:
         young = _require_owner(user, alert)
-    elif user.role in {UserRole.PARENT, UserRole.RELATIVE}:
-        _guardian_link(db, user, alert.young_person_id)
+    elif user.role in {UserRole.PARENT, UserRole.RELATIVE, UserRole.AUTHORITY}:
+        if user.role != UserRole.AUTHORITY:
+            _guardian_link(db, user, alert.young_person_id)
         young = alert.young_person
     else:
-        raise AlertError("Réservé au jeune, au parent ou au proche autorisé", 403)
+        raise AlertError("Réservé au jeune, au parent, au proche ou à l’autorité", 403)
     if alert.status == AlertStatus.RESOLVED:
         return to_read(alert)
     if alert.status not in OPEN_STATUSES:

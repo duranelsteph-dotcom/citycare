@@ -120,9 +120,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
               : Icons.person_search,
       'KIT' => Icons.watch,
       'SHARE' => Icons.share_location,
-      'MAP' => note.notificationType == NotificationType.riskZoneEnter
-          ? Icons.report_gmailerrorred_outlined
-          : Icons.map_outlined,
+      'MAP' => note.notificationType == NotificationType.anomaly
+          ? Icons.warning_amber_outlined
+          : note.notificationType == NotificationType.riskZoneEnter
+              ? Icons.report_gmailerrorred_outlined
+              : Icons.map_outlined,
       _ => Icons.notifications_outlined,
     };
   }

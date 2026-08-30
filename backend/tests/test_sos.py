@@ -14,7 +14,7 @@ def _register(role: UserRole, name: str) -> dict:
     phone = f"+2377{uuid4().hex[:8]}"
     response = client.post(
         "/api/v1/auth/register",
-        json={"full_name": name, "phone": phone, "password": "motdepasse", "role": role.value},
+        json={"full_name": name, "phone": phone, "password": "VilleCare1!", "role": role.value},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -233,3 +233,21 @@ def test_relative_sos_with_permission_is_not_kidnapping() -> None:
     notes = [note for note in client.get("/api/v1/notifications/me", headers=_auth(young)).json() if note["notification_type"] == "SOS"]
     assert notes
     assert "kidnapping" in notes[0]["body"].lower()
+
+
+def test_authority_cannot_trigger_sos_but_can_list_and_ack() -> None:
+    young = _register(UserRole.YOUNG, "Amina Auth")
+    authority = _register(UserRole.AUTHORITY, "Poste Auth")
+    created = client.post("/api/v1/alerts/sos", headers=_auth(young), json=POINT)
+    assert created.status_code == 200
+    denied = client.post("/api/v1/alerts/sos", headers=_auth(authority), json=POINT)
+    assert denied.status_code == 403
+    listed = client.get("/api/v1/alerts/mine", headers=_auth(authority))
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["id"] == created.json()["id"]
+    ack = client.post(
+        f"/api/v1/alerts/{created.json()['id']}/acknowledge",
+        headers=_auth(authority),
+    )
+    assert ack.status_code == 200, ack.text
+    assert ack.json()["status"] == "ACKNOWLEDGED"

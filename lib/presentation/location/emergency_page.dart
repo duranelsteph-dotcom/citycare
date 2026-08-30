@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/brand.dart';
 import '../../domain/enums/citycare_enums.dart';
 import '../auth/role_labels.dart';
 import '../cases/case_pages.dart';
@@ -30,7 +31,11 @@ class _EmergencyModePageState extends State<EmergencyModePage> {
   Widget build(BuildContext context) {
     final locations = LocationScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('MODE URGENCE')),
+      appBar: AppBar(
+        backgroundColor: CityCareBrand.sos,
+        foregroundColor: Colors.white,
+        title: const Text('MODE URGENCE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+      ),
       body: ListenableBuilder(
         listenable: locations,
         builder: (context, _) {

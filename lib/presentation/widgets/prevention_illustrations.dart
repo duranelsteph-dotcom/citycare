@@ -64,8 +64,8 @@ class _Ink {
   Color get ground =>
       onDark ? Colors.white.withValues(alpha: 0.16) : CityCareBrand.primary.withValues(alpha: 0.16);
   Color get neutral => onDark ? const Color(0xFFD7DEEA) : const Color(0xFF4E5865);
-  Color get adult => onDark ? const Color(0xFF9DBBFA) : CityCareBrand.primary;
-  Color get child => onDark ? const Color(0xFF5FD6C7) : CityCareBrand.secondary;
+  Color get adult => onDark ? const Color(0xFFC8FFD4) : CityCareBrand.limeDark;
+  Color get child => onDark ? const Color(0xFFFFFF8D) : CityCareBrand.lime;
   Color get skin => onDark ? const Color(0xFFF3D2AE) : const Color(0xFFE8B98C);
   Color get safe => CityCareBrand.safe;
   Color get warn => CityCareBrand.amber;

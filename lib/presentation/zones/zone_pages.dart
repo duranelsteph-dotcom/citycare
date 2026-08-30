@@ -12,11 +12,13 @@ class SafetyZonesPage extends StatefulWidget {
     this.youngPersonId,
     this.displayName,
     this.canEdit = false,
+    this.openEditorOnStart = false,
   });
 
   final String? youngPersonId;
   final String? displayName;
   final bool canEdit;
+  final bool openEditorOnStart;
 
   @override
   State<SafetyZonesPage> createState() => _SafetyZonesPageState();
@@ -26,8 +28,12 @@ class _SafetyZonesPageState extends State<SafetyZonesPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _reload();
+      if (!mounted || !widget.openEditorOnStart || !widget.canEdit) {
+        return;
+      }
+      await _openEditor(context);
     });
   }
 
@@ -45,6 +51,7 @@ class _SafetyZonesPageState extends State<SafetyZonesPage> {
     final zones = ZoneScope.of(context);
     final title = widget.displayName == null ? 'Mes zones de sécurité' : 'Zones · ${widget.displayName}';
     return Scaffold(
+      key: const Key('safety-zones-page'),
       appBar: AppBar(title: Text(title)),
       floatingActionButton: widget.canEdit && widget.youngPersonId != null
           ? FloatingActionButton.extended(

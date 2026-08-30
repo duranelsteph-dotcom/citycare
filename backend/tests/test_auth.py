@@ -19,7 +19,7 @@ def test_register_young_and_me() -> None:
         json={
             "full_name": "Amina Test",
             "phone": phone,
-            "password": "motdepasse",
+            "password": "VilleCare1!",
             "role": UserRole.YOUNG.value,
         },
     )
@@ -40,7 +40,7 @@ def test_register_parent_has_no_young_profile() -> None:
         json={
             "full_name": "Parent Test",
             "phone": _phone(),
-            "password": "motdepasse",
+            "password": "VilleCare1!",
             "role": UserRole.PARENT.value,
         },
     )
@@ -55,7 +55,7 @@ def test_login_rejects_bad_password() -> None:
         json={
             "full_name": "Login Test",
             "phone": phone,
-            "password": "motdepasse",
+            "password": "VilleCare1!",
             "role": UserRole.PARENT.value,
         },
     )

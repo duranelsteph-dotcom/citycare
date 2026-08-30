@@ -21,7 +21,7 @@ def _register(role: UserRole, name: str) -> dict:
     phone = f"+2377{uuid4().hex[:8]}"
     response = client.post(
         "/api/v1/auth/register",
-        json={"full_name": name, "phone": phone, "password": "motdepasse", "role": role.value},
+        json={"full_name": name, "phone": phone, "password": "VilleCare1!", "role": role.value},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -126,13 +126,15 @@ def test_enter_during_hours_notifies_young_and_parent() -> None:
     young_inbox = client.get("/api/v1/notifications/me", headers=_auth(young))
     parent_inbox = client.get("/api/v1/notifications/me", headers=_auth(parent))
     assert young_inbox.status_code == 200
-    assert len(young_inbox.json()) == 1
-    note = young_inbox.json()[0]
-    assert note["notification_type"] == "RISK_ZONE_ENTER"
+    # Le parent peut aussi recevoir une ANOMALY Phase 17 (trou 30 min) : on ne compte que l’entrée de zone.
+    young_risk = [item for item in young_inbox.json() if item["notification_type"] == "RISK_ZONE_ENTER"]
+    parent_risk = [item for item in parent_inbox.json() if item["notification_type"] == "RISK_ZONE_ENTER"]
+    assert len(young_risk) == 1
+    note = young_risk[0]
     assert name in note["body"]
     assert "kidnapping" in note["body"].lower()
-    assert len(parent_inbox.json()) == 1
-    assert parent_inbox.json()[0]["notification_type"] == "RISK_ZONE_ENTER"
+    assert len(parent_risk) == 1
+    assert name in parent_risk[0]["body"]
 
 
 def test_outside_typical_hours_does_not_notify() -> None:

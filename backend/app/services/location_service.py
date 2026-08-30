@@ -9,6 +9,7 @@ from app.models.tracker import GPSTracker, TrackerLocation
 from app.models.user import User
 from app.schemas.entities import TrackerLocationRead
 from app.schemas.location import LocationCreate, LocationWatch
+from app.services.anomaly_service import evaluate_anomalies
 from app.services.family_service import require_young
 from app.services.geofence_service import evaluate_geofences
 from app.services.risk_geofence_service import evaluate_risk_zones
@@ -77,6 +78,7 @@ def ingest_point(
     db.flush()
     evaluate_geofences(db, young, point, previous)
     evaluate_risk_zones(db, young, point, previous)
+    evaluate_anomalies(db, young, point, previous)
     return point
 
 

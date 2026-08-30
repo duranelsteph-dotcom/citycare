@@ -104,6 +104,11 @@ env/
 .ruff_cache/
 *.egg-info/
 
+# Photos de profil locales (disque, pas Firebase)
+uploads/
+backend/static/uploads/
+static/uploads/
+
 # --------------------------------------------------------------------------
 # Bases de données locales
 # --------------------------------------------------------------------------

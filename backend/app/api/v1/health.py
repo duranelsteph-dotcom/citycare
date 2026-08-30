@@ -35,6 +35,19 @@ def security_status() -> dict:
             "Sans cela, seul l'inbox in-app est utilisé. Ce n'est pas un kidnapping confirmé."
         ),
         "passwords_hashed": True,
+        "otp_hashed": True,
+        "otp_sms_configured": False,
+        "otp_note": (
+            "Le 2e facteur est un code à 6 chiffres après le mot de passe. "
+            "En développement, otp_dev est renvoyé dans le JSON (aucun SMS). "
+            "Aucun fournisseur SMS n'est branché."
+        ),
+        "password_reset_sms_configured": False,
+        "password_reset_note": (
+            "Mot de passe oublié : code à 6 chiffres, aucun SMS ni e-mail. "
+            "En développement, reset_code_dev est renvoyé. "
+            "Aucun fournisseur Twilio ou SMTP n'est branché."
+        ),
         "kit_secrets_hashed": True,
         "jwt_algorithm": settings.jwt_algorithm,
         "jwt_in_query_forbidden": True,

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/errors/api_exception.dart';
 import '../../domain/entities/alerts.dart';
+import '../../domain/enums/citycare_enums.dart';
 import '../../domain/repositories/notification_repository.dart';
 
 class NotificationController extends ChangeNotifier {
@@ -15,6 +16,21 @@ class NotificationController extends ChangeNotifier {
   String? errorMessage;
 
   int get unreadCount => items.where((item) => !item.isRead).length;
+
+  /// Dernière ANOMALY récente (règles ou saut GPS). Pas un kidnapping.
+  AppNotification? get recentAnomaly {
+    final cutoff = DateTime.now().toUtc().subtract(const Duration(hours: 6));
+    for (final item in items) {
+      if (item.notificationType != NotificationType.anomaly) {
+        continue;
+      }
+      if (item.createdAt.toUtc().isBefore(cutoff)) {
+        continue;
+      }
+      return item;
+    }
+    return null;
+  }
 
   Future<void> load({bool? unreadOnly}) async {
     if (unreadOnly != null) {

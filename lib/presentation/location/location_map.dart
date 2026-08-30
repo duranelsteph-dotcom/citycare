@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/brand.dart';
 import '../../core/config/maps_config.dart';
+import '../map/care_status.dart';
 import 'maps/google_map_view.dart';
 import 'maps/map_data.dart';
 import 'maps/osm_map_view.dart';
@@ -28,6 +29,10 @@ class LocationMapView extends StatelessWidget {
     this.circles = const [],
     this.pathSegments = const [],
     this.pins = const [],
+    this.focusLatitude,
+    this.focusLongitude,
+    this.focusGeneration = 0,
+    this.careStatus,
     this.onTap,
   });
 
@@ -39,6 +44,14 @@ class LocationMapView extends StatelessWidget {
   final List<MapCircle> circles;
   final List<List<LatLng>> pathSegments;
   final List<MapPin> pins;
+
+  /// Recentrage demandé depuis le panneau membres (pas un GPS continu).
+  final double? focusLatitude;
+  final double? focusLongitude;
+  final int focusGeneration;
+
+  /// Statut unifié affiché sur la carte (même helper que le sheet).
+  final CareStatus? careStatus;
   final void Function(double latitude, double longitude)? onTap;
 
   bool get hasPoint => latitude != null && longitude != null;
@@ -54,10 +67,15 @@ class LocationMapView extends StatelessWidget {
       circles: circles,
       pathSegments: pathSegments,
       pins: pins,
+      focusLatitude: focusLatitude,
+      focusLongitude: focusLongitude,
+      focusGeneration: focusGeneration,
+      careLevel: careStatus?.level,
     );
     final reason = MapsConfig.fallbackReason;
 
-    return Stack(
+    return ClipRect(
+      child: Stack(
       children: [
         Positioned.fill(
           child: MapsConfig.provider == MapProvider.google
@@ -70,7 +88,22 @@ class LocationMapView extends StatelessWidget {
             left: CityCareBrand.spaceSm,
             child: _MapProviderNotice(reason: reason),
           ),
+        if (careStatus != null && careStatus!.visible)
+          Positioned(
+            top: CityCareBrand.spaceSm,
+            right: CityCareBrand.spaceSm,
+            child: Material(
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+              borderRadius: CityCareBrand.borderRadiusSm,
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: CareStatusBadge(status: careStatus!, showDisclaimer: false),
+              ),
+            ),
+          ),
       ],
+      ),
     );
   }
 }
@@ -99,14 +132,14 @@ class _MapProviderNotice extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.layers_outlined, size: 16, color: scheme.onSurfaceVariant),
+              const Icon(Icons.layers_outlined, size: 16, color: CityCareBrand.lime),
               const SizedBox(width: 6),
               Text(
                 'Carte OpenStreetMap',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: scheme.onSurfaceVariant,
+                  color: scheme.onSurface,
                 ),
               ),
               const SizedBox(width: 4),

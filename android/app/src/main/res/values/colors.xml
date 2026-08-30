@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Couleurs de marque CityCare utilisées par l'écran de lancement natif.
-     Elles reprennent lib/app/brand.dart pour qu'il n'y ait aucune rupture
-     visuelle entre le splash Android et le splash Flutter. -->
+     Elles reprennent lib/app/brand.dart (violet) pour qu'il n'y ait aucune
+     rupture visuelle entre le splash Android et le splash Flutter. -->
 <resources>
-    <color name="citycare_splash_background">#1B5CD9</color>
+    <color name="citycare_splash_background">#5B2C8B</color>
     <color name="citycare_splash_mark">#FFFFFF</color>
-    <color name="citycare_splash_accent">#0E9A8D</color>
+    <color name="citycare_splash_accent">#6A1B9A</color>
 </resources>
