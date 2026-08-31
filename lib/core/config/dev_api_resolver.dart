@@ -95,6 +95,24 @@ bool isNoRouteToHostError(Object error) {
       detail.contains('os error: 113');
 }
 
+bool isConnectionResetError(Object error) {
+  final detail = error.toString().toLowerCase();
+  return detail.contains('connection reset') ||
+      detail.contains('connection closed') ||
+      detail.contains('errno = 104') ||
+      detail.contains('errno=104') ||
+      detail.contains('os error: 104');
+}
+
+bool isTransientNetworkError(Object error) {
+  return isNoRouteToHostError(error) || isConnectionResetError(error);
+}
+
+bool isNgrokOrTunnelUrl(String url) {
+  final host = hostOfApiUrl(url)?.toLowerCase() ?? '';
+  return host.contains('ngrok') || host.endsWith('.trycloudflare.com');
+}
+
 bool shouldRetryAfterNetworkError({
   required String failedUrl,
   required Object error,
@@ -107,7 +125,7 @@ bool shouldRetryAfterNetworkError({
       detail.contains('network is unreachable') ||
       detail.contains('os error: 111') ||
       detail.contains('errno = 111') ||
-      isNoRouteToHostError(error);
+      isTransientNetworkError(error);
   if (!refused) {
     return false;
   }
@@ -183,6 +201,7 @@ bool _usableRemembered(String? url, {required bool isWeb, required bool isEmulat
 List<String> healthProbeCandidates({
   required String lanApiUrl,
   String? hotspotApiUrl,
+  String? tunnelApiUrl,
   required bool isAndroid,
   required bool isEmulator,
   required bool isWeb,
@@ -191,6 +210,11 @@ List<String> healthProbeCandidates({
   final env = normalizeApiUrl(fromEnv);
   if (env.isNotEmpty && isHttpsProductionUrl(env)) {
     return [env];
+  }
+
+  final tunnel = normalizeApiUrl(tunnelApiUrl ?? '');
+  if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
+    return [tunnel];
   }
 
   final out = <String>[];
@@ -219,11 +243,11 @@ List<String> healthProbeCandidates({
   }
 
   add(kLoopbackApiUrl);
+  add(hotspotApiUrl);
   if (_usableLanOverride(env, isWeb: false, isEmulator: false)) {
     add(env);
   }
   add(lanApiUrl);
-  add(hotspotApiUrl);
   return out;
 }
 
@@ -235,11 +259,17 @@ List<String> devApiUrlCandidates({
   required bool isWeb,
   required String lanApiUrl,
   String? hotspotApiUrl,
+  String? tunnelApiUrl,
   String? remembered,
 }) {
   final env = normalizeApiUrl(fromEnv);
   if (env.isNotEmpty && isHttpsProductionUrl(env)) {
     return [env];
+  }
+
+  final tunnel = normalizeApiUrl(tunnelApiUrl ?? '');
+  if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
+    return [tunnel];
   }
 
   final out = <String>[];
@@ -280,8 +310,9 @@ List<String> devApiUrlCandidates({
     return out;
   }
 
-  // TÃ©lÃ©phone physique : 127.0.0.1 (adb reverse), puis LAN, hotspot en dernier.
+  // Téléphone physique : tunnel ngrok, adb reverse, hotspot Windows, puis Wi-Fi PC.
   add(kLoopbackApiUrl);
+  add(hotspotApiUrl);
   if (_usableLanOverride(env, isWeb: false, isEmulator: false)) {
     add(env);
   }
@@ -289,7 +320,6 @@ List<String> devApiUrlCandidates({
   if (_usableRemembered(remembered, isWeb: false, isEmulator: false)) {
     add(remembered);
   }
-  add(hotspotApiUrl);
   if (isAndroid) {
     add(kAndroidEmulatorApiUrl);
   }

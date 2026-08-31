@@ -45,6 +45,7 @@ class ApiConfig {
       isWeb: kIsWeb,
       lanApiUrl: kDevLanApiUrl,
       hotspotApiUrl: kDevHotspotApiUrl,
+      tunnelApiUrl: kTunnelApiUrl,
       remembered: rememberedUrl,
     );
   }
@@ -107,6 +108,14 @@ class ApiConfig {
 
   /// Health-check : reverse, LAN, hotspot seulement si /health répond.
   static Future<void> selectReachableBaseUrl({http.Client? client}) async {
+    final tunnel = normalizeApiUrl(kTunnelApiUrl);
+    if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
+      if (await _healthOk(tunnel, client: client)) {
+        currentOverride = tunnel;
+        await persistWorking(tunnel);
+      }
+      return;
+    }
     if (isHttpsProductionUrl(fromEnvironment)) {
       return;
     }
@@ -117,6 +126,7 @@ class ApiConfig {
       isWeb: kIsWeb,
       lanApiUrl: kDevLanApiUrl,
       hotspotApiUrl: kDevHotspotApiUrl,
+      tunnelApiUrl: kTunnelApiUrl,
     );
     for (final url in urls) {
       if (await _healthOk(url, client: client)) {
@@ -154,7 +164,10 @@ class ApiConfig {
     final httpClient = client ?? http.Client();
     try {
       final uri = Uri.parse('${normalizeApiUrl(url)}/health');
-      final response = await httpClient.get(uri).timeout(healthProbeTimeout);
+      final headers = isNgrokOrTunnelUrl(url)
+          ? const {'ngrok-skip-browser-warning': 'true'}
+          : const <String, String>{};
+      final response = await httpClient.get(uri, headers: headers).timeout(healthProbeTimeout);
       return response.statusCode >= 200 && response.statusCode < 300;
     } catch (_) {
       return false;
@@ -170,6 +183,15 @@ class ApiConfig {
     final next = nextFallbackAfter(baseUrl, candidates);
     currentOverride = next;
     return next;
+  }
+
+  static Future<void> clearPersistedUrl() async {
+    currentOverride = null;
+    rememberedUrl = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(kWorkingApiUrlPrefKey);
+    } catch (_) {}
   }
 
   static Future<void> persistWorking(String url) async {

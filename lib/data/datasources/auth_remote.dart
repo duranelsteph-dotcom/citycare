@@ -132,10 +132,10 @@ class AuthRemoteDataSource {
     final response = await guardedHttp(
       () => _client.post(
         ApiConfig.uri(path),
-        headers: {
+        headers: cityCareApiHeaders({
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-        },
+        }),
         body: jsonEncode(body),
       ),
     );

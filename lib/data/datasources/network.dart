@@ -16,6 +16,18 @@ const offlineException = ApiException(
   statusCode: 0,
 );
 
+/// En-têtes requis pour ngrok (plan gratuit) et autres tunnels HTTPS.
+Map<String, String> cityCareApiHeaders([Map<String, String>? extra]) {
+  final headers = <String, String>{};
+  if (isNgrokOrTunnelUrl(ApiConfig.baseUrl)) {
+    headers['ngrok-skip-browser-warning'] = 'true';
+  }
+  if (extra != null) {
+    headers.addAll(extra);
+  }
+  return headers;
+}
+
 /// Timeout, USB / adb reverse, API arrêtée : message réel, pas un silence.
 ApiException connectionFailure(Object error) {
   final detail = error.toString();
@@ -24,18 +36,22 @@ ApiException connectionFailure(Object error) {
       detail.toLowerCase().contains('timed out') ||
       detail.toLowerCase().contains('network is unreachable') ||
       isNoRouteToHostError(error) ||
+      isConnectionResetError(error) ||
       error is TimeoutException;
   if (usb) {
+    final hint = isConnectionResetError(error)
+        ? 'Connexion coupée (IP Wi-Fi ou hotspot). Utilisez un tunnel ngrok : '
+            'scripts/start_dev_tunnel.ps1 — ou USB + adb reverse tcp:8000 tcp:8000.'
+        : isNgrokOrTunnelUrl(ApiConfig.baseUrl)
+            ? 'Vérifiez que ngrok tourne (scripts/start_ngrok.ps1) et que tunnel_api_url.dart est à jour.'
+            : 'Téléphone et PC sur le même Wi-Fi, ou USB + adb reverse, ou tunnel ngrok.';
     return ApiException(
-      'Serveur injoignable ($detail). '
-      'Téléphone et PC doivent être sur le même Wi-Fi. '
-      'API : python -m app.run_api (0.0.0.0:$kDevLanPort), pas seulement 127.0.0.1. '
-      'URL attendue : $kDevLanApiUrl. '
-      'Si l’IP a changé : ipconfig, puis mettre à jour lib/app/dev_api_host.dart '
-      'ou Additional run args --dart-define=CITYCARE_API_URL=http://IP:8000/api/v1. '
-      'Pare-feu Windows : autoriser TCP $kDevLanPort. '
-      'USB en plus : adb reverse tcp:8000 tcp:8000. '
-      'Émulateur : 10.0.2.2:8000.',
+      'Serveur injoignable ($detail). $hint '
+      'API : python -m app.run_api (0.0.0.0:$kDevLanPort). '
+      'URL USB : http://127.0.0.1:$kDevLanPort/api/v1. '
+      'Hotspot Windows : http://$kDevHotspotHost:$kDevLanPort/api/v1. '
+      'Wi-Fi PC : $kDevLanApiUrl. '
+      'Pare-feu : autoriser TCP $kDevLanPort.',
       statusCode: 0,
     );
   }
@@ -75,6 +91,13 @@ Future<http.Response> guardedHttp(
     }
     if (!shouldRetryAfterNetworkError(failedUrl: used, error: lastError)) {
       throw connectionFailure(lastError);
+    }
+    final failedHost = hostOfApiUrl(used);
+    if (failedHost != null &&
+        isPrivateLanHost(failedHost) &&
+        !isLoopbackHost(failedHost) &&
+        !isWindowsHotspotHost(failedHost)) {
+      await ApiConfig.clearPersistedUrl();
     }
     tried.add(used);
     final next = ApiConfig.promoteNextAfterFailure();

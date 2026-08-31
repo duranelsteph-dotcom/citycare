@@ -57,6 +57,7 @@ class Settings(BaseSettings):
         if self.app_env != "development":
             return None
         return (
+            r"https://([a-z0-9-]+\.)?(ngrok-free\.app|ngrok\.io|trycloudflare\.com)(:\d+)?|"
             r"http://(localhost|127\.0\.0\.1|10\.0\.2\.2|"
             r"192\.168\.\d{1,3}\.\d{1,3}|"
             r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"

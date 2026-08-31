@@ -86,7 +86,7 @@ def create_app() -> FastAPI:
         allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Accept"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "ngrok-skip-browser-warning"],
     )
     application.add_middleware(SecurityHeadersMiddleware)
     application.include_router(api_router, prefix=settings.api_v1_prefix)

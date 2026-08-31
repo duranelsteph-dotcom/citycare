@@ -22,3 +22,6 @@ const kDevLanApiUrl = 'http://$kDevLanHost:$kDevLanPort/api/v1';
 
 /// URL API via le hotspot Windows. Ne pas mÃ©moriser si le health Ã©choue.
 const kDevHotspotApiUrl = 'http://$kDevHotspotHost:$kDevLanPort/api/v1';
+
+/// Tunnel public ngrok — prioritaire si non vide (`tunnel_api_url.dart`).
+export 'tunnel_api_url.dart' show kTunnelApiUrl;
