@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/dev_api_host.dart';
+import '../../app/tunnel_api_url.dart';
 import 'dev_api_resolver.dart';
 
 /// Canal natif : empreinte émulateur Android (goldfish / ranchu / generic).

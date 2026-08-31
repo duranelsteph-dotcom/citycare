@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 
 import '../../../app/brand.dart';
 import '../../../core/config/api_config.dart';
+import '../../../core/config/dev_api_resolver.dart';
 
 /// Politique OSM : un User-Agent qui identifie **CityCare**, pas la lib.
 ///
@@ -22,14 +23,13 @@ const kOsmMapBackground = Color(0xFFD4E6F1);
 /// Chemin relatif du proxy tuiles sur l'API CityCare (PC avec Internet).
 const kDevTileProxyPath = '/map/tiles/{z}/{x}/{y}.png';
 
-/// En dev (API HTTP), les tuiles passent par le backend : le téléphone n'a
-/// souvent pas Internet (hotspot Windows sans partage, adb reverse seulement).
+/// En dev (API HTTP ou tunnel), les tuiles passent par le backend.
 bool get cityCareUsesBackendTileProxy {
   if (kIsWeb) {
     return false;
   }
   final base = ApiConfig.baseUrl;
-  return base.startsWith('http://');
+  return base.startsWith('http://') || isNgrokOrTunnelUrl(base);
 }
 
 /// URL principale des tuiles (proxy dev ou OSM direct en production HTTPS).
