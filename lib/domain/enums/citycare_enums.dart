@@ -29,7 +29,7 @@ enum TrackerEventType {
   anomaly,
 }
 
-enum CaseStatus { open, searching, found, closed }
+enum CaseStatus { open, acknowledged, searching, info, found, closed }
 
 enum CasePriority { low, medium, high }
 
@@ -237,7 +237,9 @@ extension CaseStatusApi on CaseStatus {
 
   static CaseStatus parse(String value) => switch (value) {
         'OPEN' => CaseStatus.open,
+        'ACKNOWLEDGED' => CaseStatus.acknowledged,
         'SEARCHING' => CaseStatus.searching,
+        'INFO' => CaseStatus.info,
         'FOUND' => CaseStatus.found,
         'CLOSED' => CaseStatus.closed,
         _ => throw FormatException('Unknown CaseStatus: $value'),

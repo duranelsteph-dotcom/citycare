@@ -244,7 +244,7 @@ class _RoleHomePageState extends State<RoleHomePage> {
               ),
             ),
           ],
-          if (user.role == UserRole.relative) ...[
+          if (user.role == UserRole.relative || user.role == UserRole.parent) ...[
             const _HomeSectionTitle('Avis de recherche'),
             _HomeTile(
               key: const Key('role-home-relative-new-notice'),

@@ -22,6 +22,27 @@ class CaseRemoteDataSource {
     );
   }
 
+  Future<MissingPersonCase> uploadPhoto(String caseId, String filePath) async {
+    final token = await _tokens.read();
+    if (token == null || token.isEmpty) {
+      throw const ApiException('Authentification requise', statusCode: 401);
+    }
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiConfig.baseUrl}/cases/$caseId/photo'),
+    );
+    request.headers['Accept'] = 'application/json';
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(apiErrorMessage(decoded, response.statusCode), statusCode: response.statusCode);
+    }
+    return MissingPersonCase.fromJson(decoded as Map<String, dynamic>);
+  }
+
   Future<List<MissingPersonCase>> mineAsYoung() async {
     final decoded = await _json('GET', '/cases/me');
     return (decoded as List<dynamic>)
@@ -46,6 +67,21 @@ class CaseRemoteDataSource {
 
   Future<MissingPersonCase> startSearch(String caseId) async {
     return MissingPersonCase.fromJson(await _json('POST', '/cases/$caseId/searching') as Map<String, dynamic>);
+  }
+
+  Future<MissingPersonCase> acknowledge(String caseId) async {
+    return MissingPersonCase.fromJson(await _json('POST', '/cases/$caseId/acknowledge') as Map<String, dynamic>);
+  }
+
+  Future<MissingPersonCase> markInfo(String caseId) async {
+    return MissingPersonCase.fromJson(await _json('POST', '/cases/$caseId/info') as Map<String, dynamic>);
+  }
+
+  Future<List<CaseEvent>> events(String caseId) async {
+    final decoded = await _json('GET', '/cases/$caseId/events');
+    return (decoded as List<dynamic>)
+        .map((item) => CaseEvent.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<MissingPersonCase> close(String caseId) async {

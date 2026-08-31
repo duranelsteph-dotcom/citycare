@@ -30,7 +30,7 @@ TRIPS_DISCLAIMER = (
     "pas un rapport de conduite (vitesse max, distraction), "
     "pas une trajectoire analysée ni une zone de recherche."
 )
-OPEN_CASE = {CaseStatus.OPEN, CaseStatus.SEARCHING}
+OPEN_CASE = {CaseStatus.OPEN, CaseStatus.ACKNOWLEDGED, CaseStatus.SEARCHING, CaseStatus.INFO}
 VALID_PERIODS = {"today", "yesterday", "last_7_days"}
 
 

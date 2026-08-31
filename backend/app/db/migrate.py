@@ -35,6 +35,31 @@ def ensure_schema(engine: Engine) -> None:
         mc = {col["name"] for col in inspector.get_columns("missing_person_cases")}
         if "snapshot_json" not in mc:
             statements.append("ALTER TABLE missing_person_cases ADD COLUMN snapshot_json TEXT")
+        if "subject_name" not in mc:
+            statements.append("ALTER TABLE missing_person_cases ADD COLUMN subject_name VARCHAR(120)")
+        if "subject_age_approx" not in mc:
+            statements.append("ALTER TABLE missing_person_cases ADD COLUMN subject_age_approx VARCHAR(40)")
+        if "subject_sex" not in mc:
+            statements.append("ALTER TABLE missing_person_cases ADD COLUMN subject_sex VARCHAR(32)")
+        if "distinctive_signs" not in mc:
+            statements.append("ALTER TABLE missing_person_cases ADD COLUMN distinctive_signs TEXT")
+        if "last_known_address" not in mc:
+            statements.append("ALTER TABLE missing_person_cases ADD COLUMN last_known_address VARCHAR(255)")
+        if "photo_url" not in mc:
+            statements.append("ALTER TABLE missing_person_cases ADD COLUMN photo_url VARCHAR(512)")
+    if "case_events" not in tables:
+        statements.append(
+            "CREATE TABLE case_events ("
+            "id CHAR(32) NOT NULL, "
+            "case_id CHAR(32) NOT NULL, "
+            "status VARCHAR(16) NOT NULL, "
+            "label VARCHAR(160) NOT NULL, "
+            "actor_user_id CHAR(32), "
+            "created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL, "
+            "PRIMARY KEY (id)"
+            ")"
+        )
     if "marketplace_orders" not in tables:
         statements.append(
             "CREATE TABLE marketplace_orders ("

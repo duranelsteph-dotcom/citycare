@@ -2,26 +2,50 @@ import '../entities/search.dart';
 
 class CaseDraft {
   const CaseDraft({
-    required this.youngPersonId,
+    this.youngPersonId,
     this.description,
     this.clothing,
     this.circumstances,
     this.lastSeenBy,
+    this.subjectName,
+    this.subjectAgeApprox,
+    this.subjectSex,
+    this.distinctiveSigns,
+    this.lastKnownLatitude,
+    this.lastKnownLongitude,
+    this.lastKnownAddress,
+    this.photoUrl,
   });
 
-  final String youngPersonId;
+  final String? youngPersonId;
   final String? description;
   final String? clothing;
   final String? circumstances;
   final String? lastSeenBy;
+  final String? subjectName;
+  final String? subjectAgeApprox;
+  final String? subjectSex;
+  final String? distinctiveSigns;
+  final double? lastKnownLatitude;
+  final double? lastKnownLongitude;
+  final String? lastKnownAddress;
+  final String? photoUrl;
 
   Map<String, dynamic> toJson() {
     return {
-      'young_person_id': youngPersonId,
+      if (youngPersonId != null && youngPersonId!.isNotEmpty) 'young_person_id': youngPersonId,
       if (description != null && description!.isNotEmpty) 'description': description,
       if (clothing != null && clothing!.isNotEmpty) 'clothing': clothing,
       if (circumstances != null && circumstances!.isNotEmpty) 'circumstances': circumstances,
       if (lastSeenBy != null && lastSeenBy!.isNotEmpty) 'last_seen_by': lastSeenBy,
+      if (subjectName != null && subjectName!.isNotEmpty) 'subject_name': subjectName,
+      if (subjectAgeApprox != null && subjectAgeApprox!.isNotEmpty) 'subject_age_approx': subjectAgeApprox,
+      if (subjectSex != null && subjectSex!.isNotEmpty) 'subject_sex': subjectSex,
+      if (distinctiveSigns != null && distinctiveSigns!.isNotEmpty) 'distinctive_signs': distinctiveSigns,
+      if (lastKnownLatitude != null) 'last_known_latitude': lastKnownLatitude,
+      if (lastKnownLongitude != null) 'last_known_longitude': lastKnownLongitude,
+      if (lastKnownAddress != null && lastKnownAddress!.isNotEmpty) 'last_known_address': lastKnownAddress,
+      if (photoUrl != null && photoUrl!.isNotEmpty) 'photo_url': photoUrl,
     };
   }
 }
@@ -29,15 +53,23 @@ class CaseDraft {
 abstract class CaseRepository {
   Future<MissingPersonCase> create(CaseDraft draft);
 
+  Future<MissingPersonCase> uploadPhoto(String caseId, String filePath);
+
   Future<List<MissingPersonCase>> mineAsYoung();
 
   Future<List<MissingPersonCase>> mineAsGuardian();
 
   Future<MissingPersonCase> getById(String caseId);
 
+  Future<List<CaseEvent>> events(String caseId);
+
   Future<MissingPersonCase> markFound(String caseId);
 
   Future<MissingPersonCase> startSearch(String caseId);
+
+  Future<MissingPersonCase> acknowledge(String caseId);
+
+  Future<MissingPersonCase> markInfo(String caseId);
 
   Future<MissingPersonCase> close(String caseId);
 

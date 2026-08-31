@@ -1,18 +1,25 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
-import '../../domain/entities/identity.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../app/brand.dart';
+import '../../app/theme.dart';
+import '../../core/config/api_config.dart';
 import '../../domain/entities/search.dart';
 import '../../domain/enums/citycare_enums.dart';
 import '../../domain/repositories/case_repository.dart';
+import '../auth/auth_modal_scaffold.dart';
 import '../auth/auth_scope.dart';
 import '../auth/role_labels.dart';
 import '../family/family_controller.dart';
 import '../family/family_scope.dart';
 import '../location/emergency_page.dart';
 import '../location/location_map.dart';
+import '../map/member_sheet.dart';
 import 'case_scope.dart';
 
-/// Ouvre la création d’avis (proche / parent). Visible depuis le menu principal.
+/// Ouvre la création d’avis (proche / parent). Sans jeune rattaché : sujet libre.
 Future<void> startMissingPersonDeclaration(BuildContext context) async {
   final family = FamilyScope.of(context);
   await family.loadForGuardian();
@@ -24,42 +31,45 @@ Future<void> startMissingPersonDeclaration(BuildContext context) async {
 
 Future<void> _startDeclaration(BuildContext context, FamilyController family) async {
   final eligible = family.active.where((link) => link.canReportMissing).toList();
-  if (eligible.isEmpty) {
-    if (!context.mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Aucun jeune ne vous a autorisé à déclarer une disparition.'),
-      ),
-    );
-    return;
-  }
-  GuardianLink chosen = eligible.first;
-  if (eligible.length > 1) {
-    final selected = await showModalBottomSheet<GuardianLink>(
+  String? youngPersonId;
+  String? linkedName;
+  if (eligible.length == 1) {
+    youngPersonId = eligible.first.youngPersonId;
+    linkedName = eligible.first.youngDisplayName;
+  } else if (eligible.length > 1) {
+    final selected = await showModalBottomSheet<_YoungChoice>(
       context: context,
       builder: (context) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ListTile(title: Text('Quel jeune ?')),
+              const ListTile(title: Text('Pour qui déposez l’avis ?')),
               ...eligible.map(
                 (link) => ListTile(
+                  leading: const Icon(Icons.person_outline),
                   title: Text(link.youngDisplayName ?? 'Jeune'),
-                  onTap: () => Navigator.pop(context, link),
+                  onTap: () => Navigator.pop(
+                    context,
+                    _YoungChoice(youngPersonId: link.youngPersonId, displayName: link.youngDisplayName),
+                  ),
                 ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1_outlined),
+                title: const Text('Autre personne (sans compte jeune)'),
+                onTap: () => Navigator.pop(context, const _YoungChoice()),
               ),
             ],
           ),
         );
       },
     );
-    if (selected == null) {
+    if (selected == null || !context.mounted) {
       return;
     }
-    chosen = selected;
+    youngPersonId = selected.youngPersonId;
+    linkedName = selected.displayName;
   }
   if (!context.mounted) {
     return;
@@ -67,11 +77,18 @@ Future<void> _startDeclaration(BuildContext context, FamilyController family) as
   await Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => CaseCreatePage(
-        youngPersonId: chosen.youngPersonId,
-        displayName: chosen.youngDisplayName ?? 'Jeune',
+        youngPersonId: youngPersonId,
+        linkedDisplayName: linkedName,
       ),
     ),
   );
+}
+
+class _YoungChoice {
+  const _YoungChoice({this.youngPersonId, this.displayName});
+
+  final String? youngPersonId;
+  final String? displayName;
 }
 
 class CasesPage extends StatefulWidget {
@@ -150,7 +167,7 @@ class _CasesPageState extends State<CasesPage> {
                     Icons.person_search,
                     color: item.isOpen ? Theme.of(context).colorScheme.error : null,
                   ),
-                  title: Text(item.youngDisplayName ?? 'Jeune'),
+                  title: Text(item.displayName),
                   subtitle: Text('${caseStatusLabel(item.status)} · ${item.occurredAt.toLocal()}'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(builder: (_) => CaseDetailPage(caseId: item.id)),
@@ -169,99 +186,292 @@ class _CasesPageState extends State<CasesPage> {
 class CaseCreatePage extends StatefulWidget {
   const CaseCreatePage({
     super.key,
-    required this.youngPersonId,
-    required this.displayName,
+    this.youngPersonId,
+    this.linkedDisplayName,
   });
 
-  final String youngPersonId;
-  final String displayName;
+  final String? youngPersonId;
+  final String? linkedDisplayName;
 
   @override
   State<CaseCreatePage> createState() => _CaseCreatePageState();
 }
 
 class _CaseCreatePageState extends State<CaseCreatePage> {
+  final _subjectName = TextEditingController();
+  final _subjectAge = TextEditingController();
+  final _distinctiveSigns = TextEditingController();
+  final _lastKnownAddress = TextEditingController();
   final _circumstances = TextEditingController();
-  final _clothing = TextEditingController();
-  final _lastSeenBy = TextEditingController();
   final _description = TextEditingController();
+  String? _subjectSex;
+  String? _photoPath;
+  double? _latitude;
+  double? _longitude;
+
+  bool get _linkedYoung => widget.youngPersonId != null && widget.youngPersonId!.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_linkedYoung && widget.linkedDisplayName != null) {
+      _subjectName.text = widget.linkedDisplayName!;
+    }
+  }
 
   @override
   void dispose() {
+    _subjectName.dispose();
+    _subjectAge.dispose();
+    _distinctiveSigns.dispose();
+    _lastKnownAddress.dispose();
     _circumstances.dispose();
-    _clothing.dispose();
-    _lastSeenBy.dispose();
     _description.dispose();
     super.dispose();
+  }
+
+  InputDecoration _field(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      filled: true,
+      fillColor: CityCareBrand.fieldFill,
+      border: const OutlineInputBorder(borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: CityCareBrand.borderRadiusSm,
+        borderSide: const BorderSide(color: CityCareBrand.tileBorder),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: CityCareBrand.borderRadiusSm,
+        borderSide: const BorderSide(color: CityCareBrand.violet, width: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cases = CaseScope.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text('Disparition — ${widget.displayName}')),
-      body: ListenableBuilder(
-        listenable: cases,
-        builder: (context, _) {
-          return ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              if (cases.isBusy) const LinearProgressIndicator(),
-              const Text(
-                'MON ENFANT A DISPARU ouvre un dossier avec un instantané des faits connus. '
-                'Ce n’est pas un kidnapping confirmé. La dernière position n’est pas la position actuelle. '
-                'Aucune zone de recherche n’est calculée ici.',
-              ),
-              const SizedBox(height: 16),
-              if (cases.errorMessage != null)
-                Text(cases.errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              TextField(
-                controller: _circumstances,
-                decoration: const InputDecoration(labelText: 'Circonstances (optionnel)'),
-                maxLines: 3,
-              ),
-              TextField(
-                controller: _clothing,
-                decoration: const InputDecoration(labelText: 'Vêtements (optionnel)'),
-              ),
-              TextField(
-                controller: _lastSeenBy,
-                decoration: const InputDecoration(labelText: 'Vu pour la dernière fois par (optionnel)'),
-              ),
-              TextField(
-                controller: _description,
-                decoration: const InputDecoration(labelText: 'Description (optionnel)'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  minimumSize: const Size.fromHeight(56),
+    return Theme(
+      data: CityCareTheme.light(),
+      child: AuthModalScaffold(
+        body: ListenableBuilder(
+          listenable: cases,
+          builder: (context, _) {
+            return ListView(
+              key: const Key('case-create-form'),
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+              children: [
+                const Text(
+                  'Nouvel avis de recherche',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: CityCareBrand.titleInk,
+                  ),
                 ),
-                onPressed: cases.isBusy ? null : () => _confirmAndCreate(context),
-                child: Text(cases.isBusy ? 'Envoi…' : 'MON ENFANT A DISPARU'),
-              ),
-            ],
-          );
-        },
+                const SizedBox(height: 8),
+                Text(
+                  _linkedYoung
+                      ? 'Dossier pour ${widget.linkedDisplayName ?? 'le jeune rattaché'}. '
+                          'Ce n’est pas un kidnapping confirmé.'
+                      : 'Décrivez la personne disparue. Le backend crée une fiche sujet si aucun jeune n’est rattaché. '
+                          'Ce n’est pas un kidnapping confirmé.',
+                  style: const TextStyle(color: CityCareBrand.mutedText, height: 1.4),
+                ),
+                if (cases.isBusy) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(),
+                ],
+                if (cases.errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Text(cases.errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ],
+                const SizedBox(height: 20),
+                if (!_linkedYoung)
+                  TextField(
+                    key: const Key('case-subject-name'),
+                    controller: _subjectName,
+                    decoration: _field('Nom de la personne *', hint: 'Prénom et nom'),
+                    style: const TextStyle(color: CityCareBrand.titleInk),
+                  ),
+                if (!_linkedYoung) const SizedBox(height: 12),
+                TextField(
+                  key: const Key('case-subject-age'),
+                  controller: _subjectAge,
+                  decoration: _field('Âge approximatif', hint: 'Ex. 14 ans'),
+                  style: const TextStyle(color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('case-subject-sex'),
+                  initialValue: _subjectSex,
+                  decoration: _field('Sexe'),
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: CityCareBrand.titleInk),
+                  items: const [
+                    DropdownMenuItem(value: 'F', child: Text('Féminin')),
+                    DropdownMenuItem(value: 'M', child: Text('Masculin')),
+                    DropdownMenuItem(value: 'Autre', child: Text('Autre / non précisé')),
+                  ],
+                  onChanged: cases.isBusy ? null : (value) => setState(() => _subjectSex = value),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('case-distinctive-signs'),
+                  controller: _distinctiveSigns,
+                  decoration: _field('Signes distinctifs', hint: 'Cicatrice, vêtements, accessoires…'),
+                  maxLines: 2,
+                  style: const TextStyle(color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Photo',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('case-pick-photo'),
+                  onPressed: cases.isBusy ? null : _pickPhoto,
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: Text(_photoPath == null ? 'Ajouter une photo' : 'Changer la photo'),
+                ),
+                if (_photoPath != null) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: CityCareBrand.borderRadiusSm,
+                    child: Image.file(
+                      File(_photoPath!),
+                      height: 160,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Text(
+                  'Dernière localisation connue',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Touchez la carte pour placer le lieu. Pas la position actuelle, pas un suivi en direct.',
+                  style: TextStyle(color: CityCareBrand.mutedText, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 200,
+                  child: LocationMapView(
+                    latitude: _latitude,
+                    longitude: _longitude,
+                    isStale: true,
+                    onTap: (lat, lng) => setState(() {
+                      _latitude = lat;
+                      _longitude = lng;
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _latitude == null
+                      ? 'Aucun point sur la carte.'
+                      : 'Coordonnées : ${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}',
+                  style: const TextStyle(color: CityCareBrand.mutedText, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('case-last-address'),
+                  controller: _lastKnownAddress,
+                  decoration: _field('Adresse ou lieu (texte)', hint: 'Quartier, école, carrefour…'),
+                  maxLines: 2,
+                  style: const TextStyle(color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('case-circumstances'),
+                  controller: _circumstances,
+                  decoration: _field('Circonstances', hint: 'Dernières nouvelles, contexte…'),
+                  maxLines: 3,
+                  style: const TextStyle(color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('case-description'),
+                  controller: _description,
+                  decoration: _field('Description complémentaire'),
+                  maxLines: 3,
+                  style: const TextStyle(color: CityCareBrand.titleInk),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  key: const Key('case-submit'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CityCareBrand.sos,
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                  onPressed: cases.isBusy ? null : () => _confirmAndCreate(context),
+                  child: Text(cases.isBusy ? 'Envoi…' : 'Déposer l’avis de recherche'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
+  Future<void> _pickPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Galerie'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Appareil photo'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (source == null || !mounted) {
+      return;
+    }
+    final picked = await ImagePicker().pickImage(source: source, maxWidth: 1200, imageQuality: 85);
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() => _photoPath = picked.path);
+  }
+
   Future<void> _confirmAndCreate(BuildContext context) async {
+    final name = _subjectName.text.trim();
+    if (!_linkedYoung && name.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Indiquez le nom de la personne disparue.')),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Déclarer une disparition ?'),
+          title: const Text('Déposer l’avis ?'),
           content: const Text(
-            'Un instantané des faits connus sera enregistré. '
-            'Ce n’est pas un kidnapping confirmé, pas un suivi en direct, pas une trajectoire analysée.',
+            'Un instantané des faits connus sera enregistré et transmis aux autorités actives. '
+            'Ce n’est pas un kidnapping confirmé.',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Déclarer')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Déposer')),
           ],
         );
       },
@@ -272,11 +482,17 @@ class _CaseCreatePageState extends State<CaseCreatePage> {
     final ok = await CaseScope.of(context).create(
       CaseDraft(
         youngPersonId: widget.youngPersonId,
-        circumstances: _circumstances.text.trim(),
-        clothing: _clothing.text.trim(),
-        lastSeenBy: _lastSeenBy.text.trim(),
-        description: _description.text.trim(),
+        subjectName: _linkedYoung ? null : name,
+        subjectAgeApprox: _subjectAge.text.trim().isEmpty ? null : _subjectAge.text.trim(),
+        subjectSex: _subjectSex,
+        distinctiveSigns: _distinctiveSigns.text.trim().isEmpty ? null : _distinctiveSigns.text.trim(),
+        lastKnownLatitude: _latitude,
+        lastKnownLongitude: _longitude,
+        lastKnownAddress: _lastKnownAddress.text.trim().isEmpty ? null : _lastKnownAddress.text.trim(),
+        circumstances: _circumstances.text.trim().isEmpty ? null : _circumstances.text.trim(),
+        description: _description.text.trim().isEmpty ? null : _description.text.trim(),
       ),
+      photoPath: _photoPath,
     );
     if (!ok || !context.mounted) {
       return;
@@ -316,9 +532,12 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
   @override
   Widget build(BuildContext context) {
     final cases = CaseScope.of(context);
-    final isYoung = AuthScope.of(context).user?.role == UserRole.young;
+    final role = AuthScope.of(context).user?.role;
+    final isYoung = role == UserRole.young;
+    final isAuthority = role == UserRole.authority;
     final family = FamilyScope.of(context);
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(title: const Text('Fiche disparition')),
       body: ListenableBuilder(
         listenable: Listenable.merge([cases, family]),
@@ -331,16 +550,37 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
             return Center(child: Text(cases.errorMessage ?? 'Dossier introuvable'));
           }
           final canSubmit = !isYoung &&
+              !isAuthority &&
               item.isOpen &&
               family.active.any((link) => link.youngPersonId == item.youngPersonId);
           final canModerate = !isYoung &&
+              !isAuthority &&
               family.active.any(
                 (link) => link.youngPersonId == item.youngPersonId && link.canReportMissing,
               );
+          final photoUrl = ApiConfig.resolveMediaUrl(item.photoUrl);
           return ListView(
             children: [
+              if (photoUrl != null)
+                Image.network(
+                  photoUrl,
+                  height: 220,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _CasePhotoPlaceholder(name: item.displayName),
+                )
+              else
+                _CasePhotoPlaceholder(name: item.displayName),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: _CaseStatusTrack(status: item.status),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _CaseTimelineCard(events: cases.timeline),
+              ),
               SizedBox(
-                height: 240,
+                height: 220,
                 child: LocationMapView(
                   latitude: item.lastKnownLatitude,
                   longitude: item.lastKnownLongitude,
@@ -385,6 +625,7 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                       if (cases.testimonies.isNotEmpty)
                         'Épingles teal : témoignages — cohérence estimée, pas une preuve, pas la position actuelle.',
                     ].join(' '),
+                    style: const TextStyle(color: CityCareBrand.mutedText, fontSize: 13),
                   ),
                 ),
               Padding(
@@ -392,11 +633,12 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                 child: _CaseFacts(
                   item: item,
                   isYoung: isYoung,
+                  isAuthority: isAuthority,
                   canSubmitTestimony: canSubmit,
                   canModerateTestimony: canModerate,
                 ),
               ),
-              if (!isYoung)
+              if (!isYoung && !isAuthority)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: FilledButton(
@@ -404,7 +646,7 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                       MaterialPageRoute<void>(
                         builder: (_) => EmergencyModePage(
                           youngPersonId: item.youngPersonId,
-                          displayName: item.youngDisplayName ?? 'Jeune',
+                          displayName: item.displayName,
                         ),
                       ),
                     ),
@@ -419,16 +661,149 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
   }
 }
 
+class _CasePhotoPlaceholder extends StatelessWidget {
+  const _CasePhotoPlaceholder({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 160,
+      color: CityCareBrand.lavender,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: Colors.white,
+            foregroundColor: CityCareBrand.violet,
+            child: Text(memberInitials(name), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 8),
+          Text(name, style: const TextStyle(color: CityCareBrand.titleInk, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fil d’Ariane des statuts ouverts : Déposé → Pris en charge → Recherches → Infos → Clos.
+class _CaseStatusTrack extends StatelessWidget {
+  const _CaseStatusTrack({required this.status});
+
+  final CaseStatus status;
+
+  static const _flow = [
+    CaseStatus.open,
+    CaseStatus.acknowledged,
+    CaseStatus.searching,
+    CaseStatus.info,
+    CaseStatus.closed,
+  ];
+
+  int _index(CaseStatus value) {
+    if (value == CaseStatus.found) {
+      return _flow.indexOf(CaseStatus.closed);
+    }
+    final idx = _flow.indexOf(value);
+    return idx < 0 ? 0 : idx;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _index(status);
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (var i = 0; i < _flow.length; i++)
+          Chip(
+            label: Text(caseStatusLabel(_flow[i])),
+            backgroundColor: i <= current ? CityCareBrand.lavender : CityCareBrand.fieldFill,
+            labelStyle: TextStyle(
+              color: i == current ? CityCareBrand.violet : CityCareBrand.mutedText,
+              fontWeight: i == current ? FontWeight.w700 : FontWeight.w500,
+              fontSize: 12,
+            ),
+            side: BorderSide(color: i == current ? CityCareBrand.violet : CityCareBrand.tileBorder),
+          ),
+      ],
+    );
+  }
+}
+
+class _CaseTimelineCard extends StatelessWidget {
+  const _CaseTimelineCard({required this.events});
+
+  final List<CaseEvent> events;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Chronologie', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text(
+              'Évolution du dossier. Ce n’est pas un kidnapping confirmé.',
+              style: TextStyle(color: CityCareBrand.mutedText, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            if (events.isEmpty)
+              const Text('Aucun événement enregistré.')
+            else
+              for (final event in events)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.timeline, size: 18, color: CityCareBrand.violet),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              event.label,
+                              style: const TextStyle(fontWeight: FontWeight.w600, color: CityCareBrand.titleInk),
+                            ),
+                            Text(
+                              '${caseStatusLabel(event.status)} · ${event.createdAt.toLocal()}'
+                              '${event.actorName == null ? '' : ' · ${event.actorName}'}',
+                              style: const TextStyle(color: CityCareBrand.mutedText, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CaseFacts extends StatelessWidget {
   const _CaseFacts({
     required this.item,
     required this.isYoung,
+    required this.isAuthority,
     required this.canSubmitTestimony,
     required this.canModerateTestimony,
   });
 
   final MissingPersonCase item;
   final bool isYoung;
+  final bool isAuthority;
   final bool canSubmitTestimony;
   final bool canModerateTestimony;
 
@@ -447,9 +822,18 @@ class _CaseFacts extends StatelessWidget {
       children: [
         Text('Statut : ${caseStatusLabel(item.status)}', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text('Concerné : ${item.youngDisplayName ?? 'Jeune'}'),
+        Text('Concerné : ${item.displayName}'),
+        if (item.subjectAgeApprox != null && item.subjectAgeApprox!.isNotEmpty)
+          Text('Âge approx. : ${item.subjectAgeApprox}'),
+        if (item.subjectSex != null && item.subjectSex!.isNotEmpty) Text('Sexe : ${item.subjectSex}'),
+        if (item.distinctiveSigns != null && item.distinctiveSigns!.isNotEmpty)
+          Text('Signes distinctifs : ${item.distinctiveSigns}'),
         if (item.reporterName != null) Text('Déclaré par : ${item.reporterName}'),
         Text('Déclaré le ${item.occurredAt.toLocal()}'),
+        if (item.lastKnownAddress != null && item.lastKnownAddress!.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text('Dernière adresse : ${item.lastKnownAddress}'),
+        ],
         const SizedBox(height: 8),
         Text(
           item.lastKnownLatitude == null
@@ -459,7 +843,33 @@ class _CaseFacts extends StatelessWidget {
         const SizedBox(height: 8),
         Text(snapshot['disclaimer'] as String? ?? 'Ce n’est pas un kidnapping confirmé.'),
         const SizedBox(height: 16),
-        if (!isYoung && item.status == CaseStatus.open) ...[
+        if (isAuthority && item.isOpen) ...[
+          if (item.status == CaseStatus.open)
+            FilledButton(
+              key: const Key('case-acknowledge'),
+              onPressed: cases.isBusy ? null : () => cases.acknowledge(item.id),
+              child: const Text('Prendre en charge'),
+            ),
+          if (item.status == CaseStatus.open) const SizedBox(height: 8),
+          if (item.status == CaseStatus.open || item.status == CaseStatus.acknowledged)
+            FilledButton(
+              onPressed: cases.isBusy ? null : () => cases.startSearch(item.id),
+              child: const Text('Lancer les recherches'),
+            ),
+          if (item.status == CaseStatus.open || item.status == CaseStatus.acknowledged) const SizedBox(height: 8),
+          if (item.status == CaseStatus.searching)
+            OutlinedButton(
+              onPressed: cases.isBusy ? null : () => cases.markInfo(item.id),
+              child: const Text('Marquer « Infos »'),
+            ),
+          if (item.status == CaseStatus.searching) const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: cases.isBusy ? null : () => cases.close(item.id),
+            child: const Text('Clore le dossier'),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (!isYoung && !isAuthority && item.status == CaseStatus.open) ...[
           FilledButton(
             onPressed: cases.isBusy ? null : () => cases.startSearch(item.id),
             child: const Text('Démarrer la recherche'),
@@ -473,7 +883,7 @@ class _CaseFacts extends StatelessWidget {
             onPressed: cases.isBusy ? null : () => cases.markFound(item.id),
             child: const Text('Je suis en sécurité'),
           ),
-        if (!isYoung && item.isOpen) ...[
+        if (!isYoung && !isAuthority && item.isOpen) ...[
           FilledButton(
             onPressed: cases.isBusy ? null : () => cases.markFound(item.id),
             child: const Text('Marquer comme retrouvé'),

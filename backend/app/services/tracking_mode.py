@@ -13,7 +13,7 @@ OPEN_SOS = {
     AlertStatus.ACKNOWLEDGED,
     AlertStatus.IN_PROGRESS,
 }
-OPEN_CASE = {CaseStatus.OPEN, CaseStatus.SEARCHING}
+OPEN_CASE = {CaseStatus.OPEN, CaseStatus.ACKNOWLEDGED, CaseStatus.SEARCHING, CaseStatus.INFO}
 
 INTERVAL_SECONDS = {
     TrackingMode.NORMAL: 60,

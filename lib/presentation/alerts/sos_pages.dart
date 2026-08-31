@@ -230,23 +230,30 @@ class _GuardianAlertsPageState extends State<GuardianAlertsPage> {
           } else if (alerts.errorMessage != null && alerts.items.isEmpty) {
             content = Center(child: Text(alerts.errorMessage!));
           } else if (alerts.items.isEmpty) {
-            content = const Center(child: Text('Aucun SOS pour le moment.'));
-          } else {
-            content = ListView(
-              children: alerts.items.map((alert) {
-                return ListTile(
-                  leading: Icon(
-                    Icons.sos,
-                    color: alert.isOpen ? Theme.of(context).colorScheme.error : null,
-                  ),
-                  title: Text(alert.youngDisplayName ?? 'Jeune'),
-                  subtitle: Text('${alertStatusLabel(alert.status)} · ${alert.triggeredAt.toLocal()}'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => SosDetailPage(alertId: alert.id)),
-                  ),
-                );
-              }).toList(),
+            content = Center(
+              child: Text(isAuthority ? 'Aucun SOS actif pour le moment.' : 'Aucun SOS pour le moment.'),
             );
+          } else {
+            final rows = isAuthority ? alerts.items.where((alert) => alert.isOpen).toList() : alerts.items;
+            if (rows.isEmpty) {
+              content = const Center(child: Text('Aucun SOS actif pour le moment.'));
+            } else {
+              content = ListView(
+                children: rows.map((alert) {
+                  return ListTile(
+                    leading: Icon(
+                      Icons.sos,
+                      color: alert.isOpen ? Theme.of(context).colorScheme.error : null,
+                    ),
+                    title: Text(alert.youngDisplayName ?? 'Jeune'),
+                    subtitle: Text('${alertStatusLabel(alert.status)} · ${alert.triggeredAt.toLocal()}'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(builder: (_) => SosDetailPage(alertId: alert.id)),
+                    ),
+                  );
+                }).toList(),
+              );
+            }
           }
           return Column(
             children: [
@@ -331,6 +338,7 @@ class _SosDetailPageState extends State<SosDetailPage> {
   Widget build(BuildContext context) {
     final alerts = AlertScope.of(context);
     final isYoung = AuthScope.of(context).user?.role == UserRole.young;
+    final isAuthority = AuthScope.of(context).user?.role == UserRole.authority;
     return Scaffold(
       appBar: AppBar(title: const Text('Fiche SOS')),
       body: ListenableBuilder(
@@ -347,7 +355,7 @@ class _SosDetailPageState extends State<SosDetailPage> {
             children: [
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: _AlertCard(alert: alert, isYoung: isYoung),
+                child: _AlertCard(alert: alert, isYoung: isYoung, isAuthority: isAuthority),
               ),
               SizedBox(
                 height: 240,
@@ -358,7 +366,7 @@ class _SosDetailPageState extends State<SosDetailPage> {
                   isStale: alert.positionLooksStale,
                 ),
               ),
-              if (!isYoung)
+              if (!isYoung && !isAuthority)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                   child: FilledButton(
@@ -382,10 +390,15 @@ class _SosDetailPageState extends State<SosDetailPage> {
 }
 
 class _AlertCard extends StatelessWidget {
-  const _AlertCard({required this.alert, required this.isYoung});
+  const _AlertCard({
+    required this.alert,
+    required this.isYoung,
+    this.isAuthority = false,
+  });
 
   final Alert alert;
   final bool isYoung;
+  final bool isAuthority;
 
   @override
   Widget build(BuildContext context) {
@@ -395,9 +408,17 @@ class _AlertCard extends StatelessWidget {
       children: [
         Text('Statut : ${alertStatusLabel(alert.status)}', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
+        Text('Concerné : ${alert.youngDisplayName ?? 'Jeune'}'),
         Text('Source : ${alertSourceLabel(alert.source)}'),
         const SizedBox(height: 8),
         Text('Déclenché le ${alert.triggeredAt.toLocal()}'),
+        if (alert.hasPoint) ...[
+          const SizedBox(height: 8),
+          Text(
+            'GPS : ${alert.latitude!.toStringAsFixed(5)}, ${alert.longitude!.toStringAsFixed(5)}'
+            '${alert.accuracy == null ? '' : ' (±${alert.accuracy!.toStringAsFixed(0)} m)'}',
+          ),
+        ],
         const SizedBox(height: 8),
         Text(_positionCopy(alert)),
         const SizedBox(height: 12),
@@ -423,8 +444,9 @@ class _AlertCard extends StatelessWidget {
         if (!isYoung && alert.isOpen) ...[
           if (alert.status != AlertStatus.acknowledged)
             FilledButton(
+              key: const Key('sos-acknowledge'),
               onPressed: alerts.isBusy ? null : () => alerts.acknowledge(alert.id),
-              child: const Text('Prendre en compte'),
+              child: Text(isAuthority ? 'Prendre en charge' : 'Prendre en compte'),
             ),
           if (alert.status != AlertStatus.acknowledged) const SizedBox(height: 8),
           FilledButton(

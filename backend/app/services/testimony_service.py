@@ -19,7 +19,7 @@ DISCLAIMER = (
     "Témoignage humain. Aide à la décision par règles métier. "
     "Ce n'est pas un kidnapping confirmé, pas la position actuelle, pas une preuve."
 )
-OPEN_CASE = {CaseStatus.OPEN, CaseStatus.SEARCHING}
+OPEN_CASE = {CaseStatus.OPEN, CaseStatus.ACKNOWLEDGED, CaseStatus.SEARCHING, CaseStatus.INFO}
 TERMINAL = {TestimonyStatus.VERIFIED, TestimonyStatus.REJECTED}
 
 
@@ -74,12 +74,13 @@ def list_testimonies(db: Session, user: User, case_id: UUID) -> list[TestimonyRe
 
 
 def create_testimony(db: Session, user: User, case_id: UUID, payload: TestimonyCreate) -> TestimonyRead:
-    from app.services.case_service import _active_link
+    from app.services.case_service import _active_link, append_case_event
 
     if user.role == UserRole.YOUNG:
         raise TestimonyError("Le jeune concerné ne dépose pas un témoignage sur son propre dossier", 403)
     case = _case(db, case_id)
-    _active_link(db, user, case.young_person_id)
+    if user.role != UserRole.AUTHORITY:
+        _active_link(db, user, case.young_person_id)
     if case.status not in OPEN_CASE:
         raise TestimonyError("Ce dossier est clos : on n'y ajoute plus de témoignage", 409)
     observed = _aware(payload.observed_at) if payload.observed_at is not None else _utcnow()
@@ -99,6 +100,7 @@ def create_testimony(db: Session, user: User, case_id: UUID, payload: TestimonyC
     from app.services.consistency_service import apply_consistency
 
     apply_consistency(db, case, row)
+    append_case_event(db, case, CaseStatus.INFO, actor_id=user.id)
     _notify_new(db, case, row)
     db.commit()
     loaded = db.query(Testimony).filter(Testimony.id == row.id).one()
@@ -109,7 +111,8 @@ def _load_for_moderation(db: Session, user: User, case_id: UUID, testimony_id: U
     from app.services.case_service import _can_report
 
     case = _case(db, case_id)
-    _can_report(db, user, case.young_person_id)
+    if user.role != UserRole.AUTHORITY:
+        _can_report(db, user, case.young_person_id)
     row = (
         db.query(Testimony)
         .filter(Testimony.id == testimony_id, Testimony.case_id == case_id)

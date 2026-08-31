@@ -9,7 +9,7 @@ void main() {
 
   setUp(ApiConfig.resetForTests);
 
-  test('loopback et 10.0.2.2 sont injoignables depuis un téléphone physique', () {
+  test('loopback et 10.0.2.2 sont injoignables depuis un tÃ©lÃ©phone physique', () {
     expect(isLoopbackHost('127.0.0.1'), isTrue);
     expect(isLoopbackHost('localhost'), isTrue);
     expect(isEmulatorOnlyHost('10.0.2.2'), isTrue);
@@ -23,7 +23,7 @@ void main() {
     expect(isWindowsHotspotHost('10.5.48.255'), isFalse);
   });
 
-  test('émulateur Android : 10.0.2.2 d’abord, pas 127.0.0.1 seul', () {
+  test('Ã©mulateur Android : 10.0.2.2 dâ€™abord, pas 127.0.0.1 seul', () {
     final urls = devApiUrlCandidates(
       fromEnv: '',
       isAndroid: true,
@@ -37,7 +37,7 @@ void main() {
     expect(urls, contains(kLoopbackApiUrl));
   });
 
-  test('téléphone physique : reverse d’abord, dart-define 127.0.0.1 ignoré comme override', () {
+  test('tÃ©lÃ©phone physique : reverse dâ€™abord, dart-define 127.0.0.1 ignorÃ© comme override', () {
     final urls = devApiUrlCandidates(
       fromEnv: 'http://127.0.0.1:8000/api/v1',
       isAndroid: true,
@@ -53,7 +53,7 @@ void main() {
     expect(urls.first, isNot(kDevHotspotApiUrl));
   });
 
-  test('dart-define LAN est un candidat, jamais derrière le hotspot', () {
+  test('dart-define LAN est un candidat, jamais derriÃ¨re le hotspot', () {
     const override = 'http://192.168.1.40:8000/api/v1';
     final urls = devApiUrlCandidates(
       fromEnv: override,
@@ -80,7 +80,7 @@ void main() {
     expect(urls, [prod]);
   });
 
-  test('retry : 127.0.0.1 refusé -> LAN', () {
+  test('retry : 127.0.0.1 refusÃ© -> LAN', () {
     final candidates = <String>[kLoopbackApiUrl, kDevLanApiUrl];
     expect(nextFallbackAfter(kLoopbackApiUrl, candidates), kDevLanApiUrl);
     expect(nextFallbackAfter(kDevLanApiUrl, candidates), isNull);
@@ -93,7 +93,7 @@ void main() {
     );
   });
 
-  test('no route to host (hotspot) déclenche un retry, pas hors-ligne immédiat', () {
+  test('no route to host (hotspot) dÃ©clenche un retry, pas hors-ligne immÃ©diat', () {
     const error =
         'ClientException with SocketException: No route to host (OS Error: No route to host, errno = 113)';
     expect(isNoRouteToHostError(error), isTrue);
@@ -105,7 +105,7 @@ void main() {
     expect(nextFallbackAfter(kDevHotspotApiUrl, [kLoopbackApiUrl, kDevLanApiUrl]), kLoopbackApiUrl);
   });
 
-  test('hotspot 192.168.137.1 jamais en premier, cache mort ignoré', () {
+  test('hotspot 192.168.137.1 jamais en premier, cache mort ignorÃ©', () {
     expect(isDeadRememberedApiUrl(kDevHotspotApiUrl), isTrue);
     expect(isDeadRememberedApiUrl(kDevLanApiUrl), isFalse);
     final urls = devApiUrlCandidates(
@@ -140,11 +140,11 @@ void main() {
     expect(firstHealthyApiUrl(order, (_) => false), isNull);
   });
 
-  test('fichier hôte LAN n’est pas 127.0.0.1 ni le hotspot', () {
+  test('fichier hÃ´te LAN nâ€™est pas 127.0.0.1 ni le hotspot', () {
     expect(kDevLanHost, isNot('127.0.0.1'));
     expect(kDevLanHost, isNot('localhost'));
     expect(kDevLanHost, isNot(kDevHotspotHost));
-    expect(kDevLanHost, '10.5.48.255');
+    expect(kDevLanHost, '10.5.50.210');
     expect(isPrivateLanHost(kDevLanHost), isTrue);
     expect(kDevLanApiUrl, 'http://$kDevLanHost:$kDevLanPort/api/v1');
   });
@@ -162,7 +162,7 @@ void main() {
     expect(prefs.getString(kWorkingApiUrlPrefKey), kDevLanApiUrl);
   });
 
-  test('persistWorking refuse de mémoriser le hotspot', () async {
+  test('persistWorking refuse de mÃ©moriser le hotspot', () async {
     SharedPreferences.setMockInitialValues({});
     await ApiConfig.persistWorking(kDevHotspotApiUrl);
     expect(ApiConfig.currentOverride, kDevHotspotApiUrl);

@@ -40,7 +40,7 @@ OPEN_SOS = {
     AlertStatus.ACKNOWLEDGED,
     AlertStatus.IN_PROGRESS,
 }
-OPEN_CASE = {CaseStatus.OPEN, CaseStatus.SEARCHING}
+OPEN_CASE = {CaseStatus.OPEN, CaseStatus.ACKNOWLEDGED, CaseStatus.SEARCHING, CaseStatus.INFO}
 DISCLAIMER = (
     "Analyse IA : aide à la décision par règles métier et calculs géographiques. "
     "Aucun modèle de machine learning n'a été entraîné (pas de dataset labellisé). "

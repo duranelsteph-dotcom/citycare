@@ -6,6 +6,7 @@ import '../../domain/enums/citycare_enums.dart';
 import '../auth/auth_scope.dart';
 import '../family/family_scope.dart';
 import 'alert_scope.dart';
+import 'sos_errors.dart';
 
 /// FAB circulaire blanc / violet : le maintien le rend rouge et envoie le SOS.
 ///
@@ -114,6 +115,7 @@ class _HoldSosFabState extends State<HoldSosFab> with SingleTickerProviderStateM
               ),
             ),
           );
+          return;
         } else if (candidates.length == 1) {
           sent = await alerts.triggerSos(youngPersonId: candidates.first.youngPersonId);
         } else {
@@ -140,19 +142,42 @@ class _HoldSosFabState extends State<HoldSosFab> with SingleTickerProviderStateM
           ),
         );
       } else {
+        final detail = alerts.errorMessage ?? 'L’envoi du SOS a échoué.';
         messenger?.showSnackBar(
           SnackBar(
-            content: Text(alerts.errorMessage ?? 'SOS indisponible pour le moment.'),
+            content: Text(detail),
             backgroundColor: CityCareBrand.sos,
+            action: SnackBarAction(
+              label: 'Réessayer',
+              textColor: Colors.white,
+              onPressed: () {
+                if (!mounted) {
+                  return;
+                }
+                _didActivate = false;
+                _activate();
+              },
+            ),
           ),
         );
       }
     } catch (error) {
-      final detail = AlertScope.maybeOf(context)?.errorMessage;
+      final detail = AlertScope.maybeOf(context)?.errorMessage ?? describeSosFailure(error);
       messenger?.showSnackBar(
         SnackBar(
-          content: Text(detail ?? 'SOS indisponible : $error'),
+          content: Text(detail),
           backgroundColor: CityCareBrand.sos,
+          action: SnackBarAction(
+            label: 'Réessayer',
+            textColor: Colors.white,
+            onPressed: () {
+              if (!mounted) {
+                return;
+              }
+              _didActivate = false;
+              _activate();
+            },
+          ),
         ),
       );
     } finally {

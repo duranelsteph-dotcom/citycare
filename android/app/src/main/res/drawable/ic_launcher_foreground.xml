@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Premier plan Adaptive Icon : même monogramme que le splash
+     (bouclier + C + cœur), réduit pour la zone sûre (cercle / squircles). -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/citycare_splash_logo"
+    android:inset="18dp" />

@@ -62,25 +62,28 @@ def _safe_unlink(photo_url: str | None) -> None:
         target.unlink()
 
 
-def save_profile_photo(db: Session, user: User, upload: UploadFile) -> AuthUserRead:
-    """Valide, écrit le fichier, met à jour User.photo_url et YoungPerson si jeune."""
+def store_upload(upload: UploadFile, *, prefix: str) -> str:
+    """Valide JPEG/PNG, écrit sous static/uploads. Retourne /static/uploads/… (pas Firebase)."""
     raw = upload.file.read()
     if not raw:
         raise PhotoError("Fichier vide", 400)
     if len(raw) > settings.upload_max_bytes:
         raise PhotoError("La photo ne doit pas dépasser 2 Mo", 413)
     extension = _detect_extension(raw)
-
     folder = ensure_upload_dir()
-    filename = f"{user.id}_{uuid4().hex}{extension}"
-    dest = folder / filename
-    dest.write_bytes(raw)
+    filename = f"{prefix}_{uuid4().hex}{extension}"
+    (folder / filename).write_bytes(raw)
+    return f"{_PUBLIC_PREFIX}{filename}"
+
+
+def save_profile_photo(db: Session, user: User, upload: UploadFile) -> AuthUserRead:
+    """Valide, écrit le fichier, met à jour User.photo_url et YoungPerson si jeune."""
+    public_url = store_upload(upload, prefix=str(user.id))
 
     previous = user.photo_url
     if user.role == UserRole.YOUNG and user.young_profile is not None:
         previous = user.photo_url or user.young_profile.photo_url
 
-    public_url = f"{_PUBLIC_PREFIX}{filename}"
     user.photo_url = public_url
     if user.young_profile is not None:
         user.young_profile.photo_url = public_url

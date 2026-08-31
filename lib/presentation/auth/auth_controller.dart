@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../../core/config/api_config.dart';
 import '../../core/errors/api_exception.dart';
+import '../../data/datasources/network.dart';
 import '../../domain/entities/identity.dart';
 import '../../domain/enums/citycare_enums.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -46,14 +50,15 @@ class AuthController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
+      await ApiConfig.selectReachableBaseUrl();
       pendingChallenge = await _repository.login(phone: phone, password: password);
       return true;
     } on ApiException catch (error) {
       errorMessage = error.message;
       pendingChallenge = null;
       return false;
-    } catch (_) {
-      errorMessage = 'Connexion au serveur impossible. Vérifiez que l’API CityCare est démarrée.';
+    } catch (error) {
+      errorMessage = _connectionHint(error);
       pendingChallenge = null;
       return false;
     } finally {
@@ -109,13 +114,14 @@ class AuthController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
+      await ApiConfig.selectReachableBaseUrl();
       pendingReset = await _repository.requestPasswordReset(phone: phone);
       return true;
     } on ApiException catch (error) {
       errorMessage = error.message;
       return false;
-    } catch (_) {
-      errorMessage = 'Connexion au serveur impossible. Vérifiez que l’API CityCare est démarrée.';
+    } catch (error) {
+      errorMessage = _connectionHint(error);
       return false;
     } finally {
       isBusy = false;
@@ -234,6 +240,7 @@ class AuthController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
+      await ApiConfig.selectReachableBaseUrl();
       final session = await action();
       user = session.user;
       pendingChallenge = null;
@@ -243,12 +250,32 @@ class AuthController extends ChangeNotifier {
     } on ApiException catch (error) {
       errorMessage = error.message;
       return false;
-    } catch (_) {
-      errorMessage = 'Connexion au serveur impossible. Vérifiez que l’API CityCare est démarrée.';
+    } catch (error) {
+      errorMessage = _connectionHint(error);
       return false;
     } finally {
       isBusy = false;
       notifyListeners();
     }
+  }
+
+  String _connectionHint(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+    final detail = error.toString().toLowerCase();
+    if (detail.contains('connection refused') ||
+        detail.contains('failed host lookup') ||
+        detail.contains('timed out') ||
+        detail.contains('timeout') ||
+        detail.contains('network is unreachable') ||
+        detail.contains('no route to host') ||
+        detail.contains('socketexception') ||
+        detail.contains('clientexception') ||
+        error is TimeoutException) {
+      return connectionFailure(error).message;
+    }
+    return 'Connexion au serveur impossible. Vérifiez que l’API CityCare est démarrée '
+        '(python -m app.run_api sur 0.0.0.0:8000) et adb reverse tcp:8000 tcp:8000.';
   }
 }

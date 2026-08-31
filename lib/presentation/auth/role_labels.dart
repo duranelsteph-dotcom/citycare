@@ -73,10 +73,12 @@ String trackerStatusLabel(TrackerStatus status) {
 
 String caseStatusLabel(CaseStatus status) {
   return switch (status) {
-    CaseStatus.open => 'Ouvert',
-    CaseStatus.searching => 'Recherche',
+    CaseStatus.open => 'Déposé',
+    CaseStatus.acknowledged => 'Pris en charge',
+    CaseStatus.searching => 'Recherches',
+    CaseStatus.info => 'Infos',
     CaseStatus.found => 'Retrouvé',
-    CaseStatus.closed => 'Clôturé',
+    CaseStatus.closed => 'Clos',
   };
 }
 

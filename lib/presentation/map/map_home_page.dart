@@ -215,7 +215,8 @@ class _MapHomePageState extends State<MapHomePage> {
                   ),
                   SafeArea(
                     bottom: false,
-                    child: Column(
+                    child: SingleChildScrollView(
+                      child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _MapTopBar(
@@ -248,6 +249,7 @@ class _MapHomePageState extends State<MapHomePage> {
                         _AnomalyBanner(inbox: inbox),
                         _EmergencyBanner(user: user, alerts: alerts, cases: cases),
                       ],
+                    ),
                     ),
                   ),
                 ],
@@ -403,7 +405,7 @@ class _MapHomePageState extends State<MapHomePage> {
           ),
         ),
       ],
-      if (isRelative)
+      if (isRelative || user.role == UserRole.parent)
         MapShortcutAction(
           id: 'new-notice',
           icon: Icons.campaign_outlined,
@@ -508,11 +510,12 @@ class _MapHomePageState extends State<MapHomePage> {
   }) {
     if (user.role == UserRole.young) {
       return LocationMapView(
-        latitude: locations.unsyncedFix?.latitude ?? locations.latest?.latitude,
-        longitude: locations.unsyncedFix?.longitude ?? locations.latest?.longitude,
+        latitude: locations.mapLatitude,
+        longitude: locations.mapLongitude,
         accuracyMeters: locations.unsyncedFix?.accuracy ?? locations.latest?.accuracy,
-        isStale: locations.unsyncedFix == null && (locations.latest?.isStale ?? false),
+        isStale: locations.mapPointIsStale,
         isUnsynced: locations.hasUnsyncedLocations,
+        isLastKnownOnly: locations.mapUsesLastKnownOnly,
         careStatus: selectedCare ??
             careStatusForMember(
               point: locations.latest,
@@ -576,11 +579,12 @@ class _MapHomePageState extends State<MapHomePage> {
             inbox: inbox.items,
           );
     return LocationMapView(
-      latitude: locations.unsyncedFix?.latitude ?? locations.latest?.latitude,
-      longitude: locations.unsyncedFix?.longitude ?? locations.latest?.longitude,
+      latitude: locations.mapLatitude,
+      longitude: locations.mapLongitude,
       accuracyMeters: locations.unsyncedFix?.accuracy ?? locations.latest?.accuracy,
-      isStale: locations.unsyncedFix == null && (locations.latest?.isStale ?? false),
+      isStale: locations.mapPointIsStale,
       isUnsynced: locations.hasUnsyncedLocations,
+      isLastKnownOnly: locations.mapUsesLastKnownOnly,
       careStatus: selectedCare,
       pins: [
         if (selfPin != null) selfPin,

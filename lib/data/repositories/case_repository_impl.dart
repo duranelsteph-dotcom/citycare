@@ -14,13 +14,26 @@ class CaseRepositoryImpl implements CaseRepository {
   Future<MissingPersonCase> create(CaseDraft draft) => _remote.create(draft);
 
   @override
+  Future<MissingPersonCase> uploadPhoto(String caseId, String filePath) =>
+      _remote.uploadPhoto(caseId, filePath);
+
+  @override
   Future<MissingPersonCase> getById(String caseId) => _remote.getById(caseId);
+
+  @override
+  Future<List<CaseEvent>> events(String caseId) => _remote.events(caseId);
 
   @override
   Future<MissingPersonCase> markFound(String caseId) => _remote.markFound(caseId);
 
   @override
   Future<MissingPersonCase> startSearch(String caseId) => _remote.startSearch(caseId);
+
+  @override
+  Future<MissingPersonCase> acknowledge(String caseId) => _remote.acknowledge(caseId);
+
+  @override
+  Future<MissingPersonCase> markInfo(String caseId) => _remote.markInfo(caseId);
 
   @override
   Future<List<MissingPersonCase>> mineAsGuardian() => _remote.mineAsGuardian();

@@ -45,13 +45,14 @@ class ApiConfig {
       isWeb: kIsWeb,
       lanApiUrl: kDevLanApiUrl,
       hotspotApiUrl: kDevHotspotApiUrl,
+      remembered: rememberedUrl,
     );
   }
 
+  /// URL active : uniquement un health-check réussi ou le premier candidat (127.0.0.1).
   static String get baseUrl {
-    final override = currentOverride ?? rememberedUrl;
-    if (override != null && override.isNotEmpty) {
-      return override;
+    if (currentOverride != null && currentOverride!.isNotEmpty) {
+      return currentOverride!;
     }
     final list = candidates;
     if (list.isEmpty) {
@@ -134,8 +135,14 @@ class ApiConfig {
         return;
       }
     }
-    if (rememberedUrl != null && isDeadRememberedApiUrl(rememberedUrl!)) {
+    // Aucun /health : ne pas réutiliser un cache LAN mort (IP Wi-Fi changée, etc.).
+    currentOverride = null;
+    if (rememberedUrl != null) {
       rememberedUrl = null;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(kWorkingApiUrlPrefKey);
+      } catch (_) {}
     }
   }
 

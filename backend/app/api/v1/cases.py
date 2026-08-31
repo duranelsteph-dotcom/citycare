@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -11,6 +11,7 @@ from app.schemas.case import CaseCreate
 from app.schemas.testimony import TestimonyCreate
 from app.schemas.entities import (
     AiAnalysisRead,
+    CaseEventRead,
     MissingPersonCaseRead,
     SearchIntelligenceRead,
     SearchZoneRead,
@@ -19,8 +20,10 @@ from app.schemas.entities import (
 )
 from app.services.case_service import (
     CaseError,
+    attach_photo,
     create_case,
     get_case,
+    list_events,
     list_for_guardian,
     list_own,
     set_status,
@@ -238,6 +241,55 @@ def post_reject_testimony(
     try:
         return reject_testimony(db, user, case_id, testimony_id)
     except (CaseError, FamilyError, TestimonyError) as exc:
+        _http(exc)
+
+
+@router.post("/{case_id}/acknowledge", response_model=MissingPersonCaseRead)
+def post_acknowledge(
+    case_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MissingPersonCaseRead:
+    try:
+        return set_status(db, user, case_id, CaseStatus.ACKNOWLEDGED)
+    except (CaseError, FamilyError) as exc:
+        _http(exc)
+
+
+@router.post("/{case_id}/info", response_model=MissingPersonCaseRead)
+def post_info(
+    case_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MissingPersonCaseRead:
+    try:
+        return set_status(db, user, case_id, CaseStatus.INFO)
+    except (CaseError, FamilyError) as exc:
+        _http(exc)
+
+
+@router.get("/{case_id}/events", response_model=list[CaseEventRead])
+def get_case_events(
+    case_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[CaseEventRead]:
+    try:
+        return list_events(db, user, case_id)
+    except (CaseError, FamilyError) as exc:
+        _http(exc)
+
+
+@router.post("/{case_id}/photo", response_model=MissingPersonCaseRead)
+def post_case_photo(
+    case_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MissingPersonCaseRead:
+    try:
+        return attach_photo(db, user, case_id, file)
+    except (CaseError, FamilyError) as exc:
         _http(exc)
 
 

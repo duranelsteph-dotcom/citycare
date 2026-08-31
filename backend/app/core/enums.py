@@ -78,8 +78,12 @@ class TrackerEventType(StrEnum):
 
 
 class CaseStatus(StrEnum):
+    """Suivi d’avis : déposé → pris en charge → recherches → infos → clos."""
+
     OPEN = "OPEN"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
     SEARCHING = "SEARCHING"
+    INFO = "INFO"
     FOUND = "FOUND"
     CLOSED = "CLOSED"
 

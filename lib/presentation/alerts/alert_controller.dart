@@ -10,6 +10,7 @@ import '../../data/datasources/offline_queue_flush.dart';
 import '../../domain/entities/alerts.dart';
 import '../../domain/enums/citycare_enums.dart';
 import '../../domain/repositories/alert_repository.dart';
+import 'sos_errors.dart';
 
 class AlertController extends ChangeNotifier {
   AlertController(
@@ -48,13 +49,13 @@ class AlertController extends ChangeNotifier {
     await _run(() async {
       items = await _repository.mineAsYoung();
       current = openSos;
-    });
+    }, clearError: false);
   }
 
   Future<void> loadMineAsGuardian() async {
     await _run(() async {
       items = await _repository.mineAsGuardian();
-    });
+    }, clearError: false);
   }
 
   Future<void> loadOne(String alertId) async {
@@ -63,9 +64,13 @@ class AlertController extends ChangeNotifier {
     });
   }
 
-  Future<bool> triggerSos({String? youngPersonId, String? description, AlertSource? source}) {
-    return _run(() async {
-      infoMessage = null;
+  /// Envoie le SOS même sans GPS. Erreur réelle si l’API refuse / est down.
+  Future<bool> triggerSos({String? youngPersonId, String? description, AlertSource? source}) async {
+    isBusy = true;
+    errorMessage = null;
+    infoMessage = null;
+    notifyListeners();
+    try {
       Position? fix;
       try {
         // 4 s max : le SOS ne doit pas attendre un GPS qui ne répond pas.
@@ -94,17 +99,26 @@ class AlertController extends ChangeNotifier {
           infoMessage =
               'SOS enregistré sur l’appareil. ${error.message} '
               'Pas encore transmis aux contacts, pas un kidnapping confirmé.';
-          return;
+          return true;
         }
-        rethrow;
+        errorMessage = describeSosFailure(error);
+        return false;
       }
       items = [current!, ...items.where((item) => item.id != current!.id)];
       if (fix != null) {
-        infoMessage = 'SOS envoyé avec la position du téléphone. Pas un suivi en direct, pas un kidnapping confirmé.';
+        infoMessage =
+            'SOS envoyé avec la position du téléphone. Pas un suivi en direct, pas un kidnapping confirmé.';
       } else {
         infoMessage ??= 'SOS envoyé sans GPS. Pas un suivi en direct, pas un kidnapping confirmé.';
       }
-    });
+      return true;
+    } catch (error) {
+      errorMessage = describeSosFailure(error);
+      return false;
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
   }
 
   Future<int> flushPending() async {
@@ -139,9 +153,11 @@ class AlertController extends ChangeNotifier {
     });
   }
 
-  Future<bool> _run(Future<void> Function() action) async {
+  Future<bool> _run(Future<void> Function() action, {bool clearError = true}) async {
     isBusy = true;
-    errorMessage = null;
+    if (clearError) {
+      errorMessage = null;
+    }
     notifyListeners();
     try {
       await action();
@@ -150,10 +166,10 @@ class AlertController extends ChangeNotifier {
       errorMessage = error.message;
       return false;
     } on ApiException catch (error) {
-      errorMessage = error.message;
+      errorMessage = describeSosFailure(error);
       return false;
     } catch (error) {
-      errorMessage = 'SOS indisponible : $error';
+      errorMessage = describeSosFailure(error);
       return false;
     } finally {
       isBusy = false;

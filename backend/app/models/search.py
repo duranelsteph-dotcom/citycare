@@ -44,6 +44,12 @@ class MissingPersonCase(TimestampMixin, Base):
     circumstances: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Identité saisie sur l’avis (proche) — complète le jeune rattaché s’il y en a un.
+    subject_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    subject_age_approx: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    subject_sex: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    distinctive_signs: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_known_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[CaseStatus] = mapped_column(enum_column(CaseStatus), nullable=False, default=CaseStatus.OPEN, index=True)
     priority: Mapped[CasePriority] = mapped_column(
@@ -57,6 +63,30 @@ class MissingPersonCase(TimestampMixin, Base):
     testimonies: Mapped[list[Testimony]] = relationship("Testimony", back_populates="case")
     search_zones: Mapped[list[SearchZone]] = relationship("SearchZone", back_populates="case")
     analyses: Mapped[list[RiskAnalysis]] = relationship("RiskAnalysis", back_populates="case")
+    events: Mapped[list[CaseEvent]] = relationship("CaseEvent", back_populates="case")
+
+
+class CaseEvent(TimestampMixin, Base):
+    """Étape de suivi (déposé, pris en charge, recherches, infos, clos)."""
+
+    __tablename__ = "case_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    case_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("missing_person_cases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[CaseStatus] = mapped_column(enum_column(CaseStatus), nullable=False)
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    case: Mapped[MissingPersonCase] = relationship("MissingPersonCase", back_populates="events")
 
 
 class Testimony(TimestampMixin, Base):

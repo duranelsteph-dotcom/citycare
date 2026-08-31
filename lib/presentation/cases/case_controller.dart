@@ -11,6 +11,7 @@ class CaseController extends ChangeNotifier {
 
   List<MissingPersonCase> items = [];
   MissingPersonCase? current;
+  List<CaseEvent> timeline = [];
   Trajectory? trajectory;
   SearchIntelligence? intelligence;
   AiAnalysis? aiAnalysis;
@@ -60,6 +61,11 @@ class CaseController extends ChangeNotifier {
     await _run(() async {
       current = await _repository.getById(caseId);
       try {
+        timeline = await _repository.events(caseId);
+      } on ApiException {
+        timeline = [];
+      }
+      try {
         trajectory = await _repository.trajectory(caseId);
       } on ApiException {
         trajectory = null;
@@ -87,10 +93,42 @@ class CaseController extends ChangeNotifier {
     });
   }
 
-  Future<bool> create(CaseDraft draft) {
+  Future<bool> create(CaseDraft draft, {String? photoPath}) {
     return _run(() async {
       current = await _repository.create(draft);
+      if (photoPath != null && photoPath.isNotEmpty) {
+        current = await _repository.uploadPhoto(current!.id, photoPath);
+      }
+      try {
+        timeline = await _repository.events(current!.id);
+      } on ApiException {
+        timeline = [];
+      }
       items = [current!, ...items.where((item) => item.id != current!.id)];
+    });
+  }
+
+  Future<bool> acknowledge(String caseId) {
+    return _run(() async {
+      current = await _repository.acknowledge(caseId);
+      items = [for (final item in items) if (item.id == current!.id) current! else item];
+      try {
+        timeline = await _repository.events(caseId);
+      } on ApiException {
+        timeline = [];
+      }
+    });
+  }
+
+  Future<bool> markInfo(String caseId) {
+    return _run(() async {
+      current = await _repository.markInfo(caseId);
+      items = [for (final item in items) if (item.id == current!.id) current! else item];
+      try {
+        timeline = await _repository.events(caseId);
+      } on ApiException {
+        timeline = [];
+      }
     });
   }
 
@@ -98,6 +136,7 @@ class CaseController extends ChangeNotifier {
     return _run(() async {
       current = await _repository.markFound(caseId);
       items = [for (final item in items) if (item.id == current!.id) current! else item];
+      await _reloadTimeline(caseId);
     });
   }
 
@@ -105,6 +144,7 @@ class CaseController extends ChangeNotifier {
     return _run(() async {
       current = await _repository.startSearch(caseId);
       items = [for (final item in items) if (item.id == current!.id) current! else item];
+      await _reloadTimeline(caseId);
     });
   }
 
@@ -133,7 +173,16 @@ class CaseController extends ChangeNotifier {
     return _run(() async {
       current = await _repository.close(caseId);
       items = [for (final item in items) if (item.id == current!.id) current! else item];
+      await _reloadTimeline(caseId);
     });
+  }
+
+  Future<void> _reloadTimeline(String caseId) async {
+    try {
+      timeline = await _repository.events(caseId);
+    } on ApiException {
+      timeline = [];
+    }
   }
 
   Future<bool> submitTestimony(String caseId, TestimonyDraft draft) {

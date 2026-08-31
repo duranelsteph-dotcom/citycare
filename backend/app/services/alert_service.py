@@ -23,6 +23,7 @@ from app.schemas.alert import SosCreate
 from app.schemas.entities import AlertRead
 from app.core.rate_limit import kit_limiter
 from app.core.security import verify_password
+from app.services.audience import active_authority_ids
 from app.services.family_service import require_young
 from app.services.geofence_service import evaluate_geofences
 from app.services.risk_geofence_service import evaluate_risk_zones
@@ -325,6 +326,23 @@ def _create_sos(
             )
             + "Ouvrez la fiche. Ce n'est pas un kidnapping confirmé.",
         )
+    authority_body = (
+        f"SOS {origin}: {young.display_name} — demande d'aide. "
+        if origin
+        else f"SOS : {young.display_name} demande de l'aide. "
+    ) + "Ouvrez Traiter les alertes. Ce n'est pas un kidnapping confirmé."
+    already = {young.user_id, *(link.guardian_user_id for link in recipients)}
+    for authority_id in active_authority_ids(db):
+        if authority_id in already:
+            continue
+        _notify(
+            db,
+            recipient_id=authority_id,
+            alert=alert,
+            young=young,
+            title="SOS — autorité",
+            body=authority_body,
+        )
     return alert
 
 
@@ -446,6 +464,18 @@ def cancel_sos(db: Session, user: User, alert_id: UUID) -> AlertRead:
             title="SOS annulé",
             body=f"{young.display_name} a annulé le SOS. Ce n'était pas un kidnapping confirmé.",
         )
+    already = {*(link.guardian_user_id for link in recipients)}
+    for authority_id in active_authority_ids(db):
+        if authority_id in already:
+            continue
+        _notify(
+            db,
+            recipient_id=authority_id,
+            alert=alert,
+            young=young,
+            title="SOS annulé",
+            body=f"{young.display_name} a annulé le SOS. Ce n'était pas un kidnapping confirmé.",
+        )
     db.commit()
     db.refresh(alert)
     return to_read(alert)
@@ -461,14 +491,41 @@ def acknowledge_sos(db: Session, user: User, alert_id: UUID) -> AlertRead:
         return to_read(alert)
     alert.status = AlertStatus.ACKNOWLEDGED
     young = alert.young_person
+    by_authority = user.role == UserRole.AUTHORITY
     _notify(
         db,
         recipient_id=young.user_id,
         alert=alert,
         young=young,
-        title="SOS pris en compte",
-        body="Un contact de confiance a pris en compte votre SOS. Ce n'est pas un kidnapping confirmé.",
+        title="SOS pris en charge" if by_authority else "SOS pris en compte",
+        body=(
+            "L’autorité a pris en charge votre SOS. Ce n'est pas un kidnapping confirmé."
+            if by_authority
+            else "Un contact de confiance a pris en compte votre SOS. Ce n'est pas un kidnapping confirmé."
+        ),
     )
+    if by_authority:
+        guardians = (
+            db.query(GuardianLink)
+            .filter(
+                GuardianLink.young_person_id == young.id,
+                GuardianLink.status == GuardianLinkStatus.ACTIVE,
+                GuardianLink.can_receive_alerts.is_(True),
+            )
+            .all()
+        )
+        for link in guardians:
+            _notify(
+                db,
+                recipient_id=link.guardian_user_id,
+                alert=alert,
+                young=young,
+                title="SOS pris en charge",
+                body=(
+                    f"L’autorité a pris en charge le SOS concernant {young.display_name}. "
+                    "Ce n'est pas un kidnapping confirmé."
+                ),
+            )
     db.commit()
     db.refresh(alert)
     return to_read(alert)
@@ -514,6 +571,18 @@ def resolve_sos(db: Session, user: User, alert_id: UUID) -> AlertRead:
         _notify(
             db,
             recipient_id=link.guardian_user_id,
+            alert=alert,
+            young=young,
+            title="SOS clos",
+            body=body,
+        )
+    already = {young.user_id, *(link.guardian_user_id for link in recipients)}
+    for authority_id in active_authority_ids(db):
+        if authority_id in already:
+            continue
+        _notify(
+            db,
+            recipient_id=authority_id,
             alert=alert,
             young=young,
             title="SOS clos",

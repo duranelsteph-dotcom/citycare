@@ -1,26 +1,26 @@
-/// Règles d’URL API en développement. Aucun secret. Testable sans plugin.
+/// RÃ¨gles dâ€™URL API en dÃ©veloppement. Aucun secret. Testable sans plugin.
 library;
 
-/// Émulateur Android -> hôte du PC (pas 127.0.0.1 dans l’émulateur).
+/// Ã‰mulateur Android -> hÃ´te du PC (pas 127.0.0.1 dans lâ€™Ã©mulateur).
 const kAndroidEmulatorApiUrl = 'http://10.0.2.2:8000/api/v1';
 
-/// Loopback : navigateur / adb reverse / simulateur iOS. Pas un téléphone Wi-Fi.
+/// Loopback : navigateur / adb reverse / simulateur iOS. Pas un tÃ©lÃ©phone Wi-Fi.
 const kLoopbackApiUrl = 'http://127.0.0.1:8000/api/v1';
 
-/// Clé SharedPreferences : dernière URL qui a réellement répondu.
-const kWorkingApiUrlPrefKey = 'citycare_working_api_url';
+/// ClÃ© SharedPreferences : derniÃ¨re URL qui a rÃ©ellement rÃ©pondu.
+const kWorkingApiUrlPrefKey = 'citycare_working_api_url_v2';
 
-/// Adresse par défaut du partage de connexion Windows (Mobile Hotspot).
+/// Adresse par dÃ©faut du partage de connexion Windows (Mobile Hotspot).
 const kWindowsHotspotHost = '192.168.137.1';
 
 bool isLoopbackHost(String host) {
   return host == '127.0.0.1' || host == 'localhost' || host == '::1';
 }
 
-/// 10.0.2.2 n’existe que dans l’émulateur Android.
+/// 10.0.2.2 nâ€™existe que dans lâ€™Ã©mulateur Android.
 bool isEmulatorOnlyHost(String host) => host == '10.0.2.2';
 
-/// Hotspot Windows : le téléphone n’y a une route que s’il y est connecté.
+/// Hotspot Windows : le tÃ©lÃ©phone nâ€™y a une route que sâ€™il y est connectÃ©.
 bool isWindowsHotspotHost(String host) => host == kWindowsHotspotHost;
 
 bool isPrivateLanHost(String host) {
@@ -69,7 +69,7 @@ String? hostOfApiUrl(String url) {
 
 bool isHttpsProductionUrl(String url) => url.trim().toLowerCase().startsWith('https://');
 
-/// Hôte que le téléphone physique ne peut pas joindre (loopback ou 10.0.2.2).
+/// HÃ´te que le tÃ©lÃ©phone physique ne peut pas joindre (loopback ou 10.0.2.2).
 bool isUnreachableFromPhysicalDevice(String url) {
   final host = hostOfApiUrl(url);
   if (host == null) {
@@ -78,7 +78,7 @@ bool isUnreachableFromPhysicalDevice(String url) {
   return isLoopbackHost(host) || isEmulatorOnlyHost(host);
 }
 
-/// Cache mort : hotspot Windows mémorisé alors que le téléphone n’y est pas.
+/// Cache mort : hotspot Windows mÃ©morisÃ© alors que le tÃ©lÃ©phone nâ€™y est pas.
 bool isDeadRememberedApiUrl(String url) {
   final host = hostOfApiUrl(url);
   if (host == null || host.isEmpty) {
@@ -118,7 +118,7 @@ bool shouldRetryAfterNetworkError({
   return isLoopbackHost(host) || isEmulatorOnlyHost(host) || isPrivateLanHost(host);
 }
 
-/// Prochain candidat après un échec, ou null si plus rien à essayer.
+/// Prochain candidat aprÃ¨s un Ã©chec, ou null si plus rien Ã  essayer.
 String? nextFallbackAfter(String failedUrl, List<String> candidates) {
   if (candidates.isEmpty) {
     return null;
@@ -139,7 +139,7 @@ String? nextFallbackAfter(String failedUrl, List<String> candidates) {
   return candidates[index + 1];
 }
 
-/// Première URL dont le health a réussi. Un hôte « no route » n’est jamais choisi.
+/// PremiÃ¨re URL dont le health a rÃ©ussi. Un hÃ´te Â« no route Â» nâ€™est jamais choisi.
 String? firstHealthyApiUrl(
   List<String> candidates,
   bool Function(String url) isHealthy,
@@ -179,7 +179,7 @@ bool _usableRemembered(String? url, {required bool isWeb, required bool isEmulat
   return !isUnreachableFromPhysicalDevice(url);
 }
 
-/// Health-check : USB reverse, LAN Wi‑Fi, hotspot seulement en dernier.
+/// Health-check : USB reverse, LAN Wiâ€‘Fi, hotspot seulement en dernier.
 List<String> healthProbeCandidates({
   required String lanApiUrl,
   String? hotspotApiUrl,
@@ -227,7 +227,7 @@ List<String> healthProbeCandidates({
   return out;
 }
 
-/// Ordre d’essai : reverse USB, LAN, cache LAN, hotspot jamais en premier.
+/// Ordre dâ€™essai : reverse USB, LAN, cache LAN, hotspot jamais en premier.
 List<String> devApiUrlCandidates({
   required String fromEnv,
   required bool isAndroid,
@@ -280,7 +280,7 @@ List<String> devApiUrlCandidates({
     return out;
   }
 
-  // Téléphone physique : 127.0.0.1 (adb reverse), puis LAN, hotspot en dernier.
+  // TÃ©lÃ©phone physique : 127.0.0.1 (adb reverse), puis LAN, hotspot en dernier.
   add(kLoopbackApiUrl);
   if (_usableLanOverride(env, isWeb: false, isEmulator: false)) {
     add(env);

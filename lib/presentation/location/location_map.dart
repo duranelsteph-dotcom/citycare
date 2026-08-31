@@ -7,6 +7,7 @@ import '../map/care_status.dart';
 import 'maps/google_map_view.dart';
 import 'maps/map_data.dart';
 import 'maps/osm_map_view.dart';
+import 'maps/osm_tiles.dart';
 
 export 'maps/map_data.dart' show MapCircle, MapPin, MapViewModel, kDefaultMapCenter, trajectorySegments;
 
@@ -33,6 +34,7 @@ class LocationMapView extends StatelessWidget {
     this.focusLongitude,
     this.focusGeneration = 0,
     this.careStatus,
+    this.isLastKnownOnly = false,
     this.onTap,
   });
 
@@ -52,6 +54,9 @@ class LocationMapView extends StatelessWidget {
 
   /// Statut unifié affiché sur la carte (même helper que le sheet).
   final CareStatus? careStatus;
+
+  /// True si le point affiché est une dernière position mémorisée, pas un GPS actuel.
+  final bool isLastKnownOnly;
   final void Function(double latitude, double longitude)? onTap;
 
   bool get hasPoint => latitude != null && longitude != null;
@@ -87,6 +92,20 @@ class LocationMapView extends StatelessWidget {
             top: CityCareBrand.spaceSm,
             left: CityCareBrand.spaceSm,
             child: _MapProviderNotice(reason: reason),
+          ),
+        if (!hasPoint && pins.isEmpty)
+          Positioned(
+            bottom: CityCareBrand.spaceSm,
+            left: CityCareBrand.spaceSm,
+            right: CityCareBrand.spaceSm,
+            child: const MapFallbackCenterBanner(usingLastKnown: false),
+          )
+        else if (isLastKnownOnly)
+          Positioned(
+            bottom: CityCareBrand.spaceSm,
+            left: CityCareBrand.spaceSm,
+            right: CityCareBrand.spaceSm,
+            child: const MapFallbackCenterBanner(usingLastKnown: true),
           ),
         if (careStatus != null && careStatus!.visible)
           Positioned(

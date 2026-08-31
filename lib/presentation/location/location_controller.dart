@@ -58,6 +58,10 @@ class LocationController extends ChangeNotifier {
   /// Dernières positions connues des jeunes liés, pour la carte famille.
   /// Une entrée absente signifie « pas d’accès » ou « aucune position ».
   final Map<String, TrackerLocation> familyLatest = {};
+  /// Dernière position réellement reçue (GPS ou API). Jamais effacée sur 404.
+  double? lastKnownLatitude;
+  double? lastKnownLongitude;
+
   Position? unsyncedFix;
   bool isBusy = false;
   String? errorMessage;
@@ -87,6 +91,34 @@ class LocationController extends ChangeNotifier {
 
   /// Point local ou file de positions : pas encore côté serveur.
   bool get hasUnsyncedLocations => unsyncedFix != null || queue.locations.isNotEmpty;
+
+  /// Latitude à afficher : GPS local, puis API, puis dernière connue. Pas inventée.
+  double? get mapLatitude => unsyncedFix?.latitude ?? latest?.latitude ?? lastKnownLatitude;
+
+  double? get mapLongitude => unsyncedFix?.longitude ?? latest?.longitude ?? lastKnownLongitude;
+
+  /// Le point carte n’est pas un GPS actuel (stale API ou dernière connue seule).
+  bool get mapPointIsStale {
+    if (unsyncedFix != null) {
+      return false;
+    }
+    if (latest != null) {
+      return latest!.isStale;
+    }
+    return lastKnownLatitude != null;
+  }
+
+  /// True si on n’a plus que la dernière position mémorisée (pas un live).
+  bool get mapUsesLastKnownOnly =>
+      unsyncedFix == null && latest == null && lastKnownLatitude != null;
+
+  void _rememberLastKnown(double? latitude, double? longitude) {
+    if (latitude == null || longitude == null) {
+      return;
+    }
+    lastKnownLatitude = latitude;
+    lastKnownLongitude = longitude;
+  }
 
   /// Lit l'état d'accès sans afficher de demande système.
   Future<LocationAccess> refreshLocationAccess() async {
@@ -125,6 +157,7 @@ class LocationController extends ChangeNotifier {
     try {
       final fix = await _device.currentFix();
       unsyncedFix = fix;
+      _rememberLastKnown(fix.latitude, fix.longitude);
       notifyListeners();
       return fix;
     } catch (_) {
@@ -288,6 +321,7 @@ class LocationController extends ChangeNotifier {
 
   void _applyWatch(LocationWatch watch) {
     latest = watch.latest;
+    _rememberLastKnown(watch.latest?.latitude, watch.latest?.longitude);
     pollAfterSeconds = watch.pollAfterSeconds;
     effectiveMode = watch.effectiveMode;
     access = watch.access;
@@ -307,6 +341,7 @@ class LocationController extends ChangeNotifier {
   /// Si la lecture échoue, le champ est omis — pas un 100 % inventé.
   Future<void> _publishDeviceFix(Position fix, {required bool refreshHistory}) async {
     unsyncedFix = fix;
+    _rememberLastKnown(fix.latitude, fix.longitude);
     final batteryLevel = await _battery.currentLevel();
     final payload = phoneFixPayload(fix, batteryLevel: batteryLevel);
     try {
@@ -321,6 +356,7 @@ class LocationController extends ChangeNotifier {
         batteryLevel: batteryLevel,
       );
       unsyncedFix = null;
+      _rememberLastKnown(latest?.latitude, latest?.longitude);
     } on ApiException catch (error) {
       if (error.isOffline) {
         queue.enqueueLocation(payload);
@@ -478,6 +514,7 @@ class LocationController extends ChangeNotifier {
       return false;
     } on ApiException catch (error) {
       if (error.statusCode == 404) {
+        // Pas de point serveur : on garde lastKnown, on n’invente rien.
         latest = null;
         return true;
       }

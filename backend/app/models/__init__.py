@@ -2,7 +2,7 @@ from app.models.alert import Alert, AppNotification
 from app.models.circle import Circle, CircleMembership
 from app.models.device import DevicePushToken
 from app.models.people import EmergencyContact, GuardianLink, YoungPerson
-from app.models.search import Incident, MissingPersonCase, RiskAnalysis, SearchZone, Testimony
+from app.models.search import Incident, MissingPersonCase, RiskAnalysis, SearchZone, Testimony, CaseEvent
 from app.models.tracker import GPSTracker, PositionShare, TrackerEvent, TrackerLocation
 from app.models.otp import OtpChallenge
 from app.models.password_reset import PasswordResetChallenge
@@ -34,6 +34,7 @@ __all__ = [
     "Alert",
     "AppNotification",
     "MissingPersonCase",
+    "CaseEvent",
     "Testimony",
     "SearchZone",
     "RiskAnalysis",

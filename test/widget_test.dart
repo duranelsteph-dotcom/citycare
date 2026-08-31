@@ -615,6 +615,24 @@ class FakeCaseRepository implements CaseRepository {
 
   @override
   Future<List<Testimony>> refreshTestimonyConsistency(String caseId) async => [];
+
+  @override
+  Future<MissingPersonCase> uploadPhoto(String caseId, String filePath) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<CaseEvent>> events(String caseId) async => [];
+
+  @override
+  Future<MissingPersonCase> acknowledge(String caseId) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<MissingPersonCase> markInfo(String caseId) async {
+    throw UnimplementedError();
+  }
 }
 
 /// InkSparkle casse le harness Windows (shader ink_sparkle.frag, Flutter 3.47).

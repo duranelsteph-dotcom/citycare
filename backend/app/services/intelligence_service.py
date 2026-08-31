@@ -41,7 +41,7 @@ OPEN_SOS = {
     AlertStatus.ACKNOWLEDGED,
     AlertStatus.IN_PROGRESS,
 }
-OPEN_CASE = {CaseStatus.OPEN, CaseStatus.SEARCHING}
+OPEN_CASE = {CaseStatus.OPEN, CaseStatus.ACKNOWLEDGED, CaseStatus.SEARCHING, CaseStatus.INFO}
 WALKING_M_S = 1.2
 RANGE_CAP_M = 50_000.0
 LOOKBACK = timedelta(hours=6)

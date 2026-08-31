@@ -204,7 +204,7 @@ class _ChildrenPageState extends State<ChildrenPage> {
                                   MaterialPageRoute<void>(
                                     builder: (_) => CaseCreatePage(
                                       youngPersonId: link.youngPersonId,
-                                      displayName: link.youngDisplayName ?? 'Jeune',
+                                      linkedDisplayName: link.youngDisplayName ?? 'Jeune',
                                     ),
                                   ),
                                 ),

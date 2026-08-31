@@ -9,21 +9,23 @@ from app.core.enums import (
     CasePriority,
     CaseStatus,
     GuardianLinkStatus,
+    GuardianRelation,
     NotificationType,
     TrackerEventType,
     UserRole,
 )
 from app.models.alert import Alert, AppNotification
 from app.models.people import GuardianLink, YoungPerson
-from app.models.search import MissingPersonCase
+from app.models.search import CaseEvent, MissingPersonCase
 from app.models.tracker import GPSTracker, TrackerEvent, TrackerLocation
 from app.models.user import User
 from app.schemas.case import CaseCreate
-from app.schemas.entities import MissingPersonCaseRead
+from app.schemas.entities import CaseEventRead, MissingPersonCaseRead
+from app.services.audience import active_authority_ids
 from app.services.family_service import require_young
 from app.services.location_service import STALE_AFTER, _aware
 
-OPEN_CASE = {CaseStatus.OPEN, CaseStatus.SEARCHING}
+OPEN_CASE = {CaseStatus.OPEN, CaseStatus.ACKNOWLEDGED, CaseStatus.SEARCHING, CaseStatus.INFO}
 OPEN_SOS = {
     AlertStatus.CREATED,
     AlertStatus.ACTIVE,
@@ -31,6 +33,14 @@ OPEN_SOS = {
     AlertStatus.IN_PROGRESS,
 }
 TERMINAL_CASE = {CaseStatus.FOUND, CaseStatus.CLOSED}
+STATUS_LABELS = {
+    CaseStatus.OPEN: "Déposé",
+    CaseStatus.ACKNOWLEDGED: "Pris en charge",
+    CaseStatus.SEARCHING: "Recherches",
+    CaseStatus.INFO: "Infos",
+    CaseStatus.FOUND: "Retrouvé",
+    CaseStatus.CLOSED: "Clos",
+}
 
 
 class CaseError(Exception):
@@ -60,10 +70,15 @@ def to_read(row: MissingPersonCase) -> MissingPersonCaseRead:
     payload = MissingPersonCaseRead.model_validate(row)
     young = row.young_person
     reporter = row.reported_by
+    display = None
+    if young is not None:
+        display = young.display_name
+    if not display and row.subject_name:
+        display = row.subject_name
     return payload.model_copy(
         update={
             "snapshot": snapshot,
-            "young_display_name": young.display_name if young else None,
+            "young_display_name": display,
             "reporter_name": reporter.full_name if reporter else None,
         }
     )
@@ -71,7 +86,7 @@ def to_read(row: MissingPersonCase) -> MissingPersonCaseRead:
 
 def _query(db: Session):
     return db.query(MissingPersonCase).options(
-        joinedload(MissingPersonCase.young_person),
+        joinedload(MissingPersonCase.young_person).joinedload(YoungPerson.user),
         joinedload(MissingPersonCase.reported_by),
     )
 
@@ -102,6 +117,14 @@ def _can_view(db: Session, user: User, young_person_id: UUID) -> None:
             raise CaseError("Vous ne pouvez consulter que votre propre dossier", 403)
         return
     _active_link(db, user, young_person_id)
+
+
+def _can_view_case(db: Session, user: User, row: MissingPersonCase) -> None:
+    if user.role == UserRole.AUTHORITY:
+        return
+    if user.id == row.reported_by_user_id:
+        return
+    _can_view(db, user, row.young_person_id)
 
 
 def _can_report(db: Session, user: User, young_person_id: UUID) -> GuardianLink:
@@ -227,47 +250,45 @@ def _build_snapshot(db: Session, young: YoungPerson) -> dict:
     }
 
 
-def _notify_case(db: Session, case: MissingPersonCase, young: YoungPerson, *, opened: bool) -> None:
-    title = "Dossier de disparition" if opened else "Dossier mis à jour"
-    note_type = NotificationType.MISSING_CASE
-    if opened:
-        body = (
-            f"Un dossier de disparition a été ouvert concernant {young.display_name}. "
-            "C'est une déclaration, pas un kidnapping confirmé. Un push FCM est tenté si un jeton appareil est enregistré."
-        )
-    elif case.status == CaseStatus.SEARCHING:
-        title = "Recherche lancée"
-        note_type = NotificationType.SEARCH_UPDATE
-        body = (
-            f"Une recherche a été lancée concernant {young.display_name}. "
-            "Aide à la décision, pas un kidnapping confirmé. Un push FCM est tenté si un jeton appareil est enregistré."
-        )
-    elif case.status == CaseStatus.FOUND:
-        body = f"{young.display_name} a été marqué comme retrouvé. Ce n'était pas un kidnapping confirmé."
-    else:
-        body = f"Le dossier concernant {young.display_name} est clôturé."
+def _subject_label(case: MissingPersonCase, young: YoungPerson | None) -> str:
+    if case.subject_name:
+        return case.subject_name
+    if young is not None:
+        return young.display_name
+    return "une personne disparue"
+
+
+def append_case_event(
+    db: Session,
+    case: MissingPersonCase,
+    status: CaseStatus,
+    *,
+    actor_id: UUID | None,
+) -> CaseEvent:
+    event = CaseEvent(
+        case_id=case.id,
+        status=status,
+        label=STATUS_LABELS.get(status, status.value),
+        actor_user_id=actor_id,
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
+def _notify_recipients(db: Session, case: MissingPersonCase, recipient_ids: list[UUID], *, title: str, body: str, note_type: NotificationType) -> None:
+    young = case.young_person
     payload = json.dumps(
         {
-            "young_person_id": str(young.id),
-            "young_display_name": young.display_name,
+            "young_person_id": str(case.young_person_id),
+            "young_display_name": _subject_label(case, young),
             "case_id": str(case.id),
             "status": case.status.value,
         },
         ensure_ascii=False,
     )
-    recipients = [young.user_id]
-    links = (
-        db.query(GuardianLink)
-        .filter(
-            GuardianLink.young_person_id == young.id,
-            GuardianLink.status == GuardianLinkStatus.ACTIVE,
-            GuardianLink.can_receive_alerts.is_(True),
-        )
-        .all()
-    )
-    recipients.extend(link.guardian_user_id for link in links)
     seen: set[UUID] = set()
-    for recipient_id in recipients:
+    for recipient_id in recipient_ids:
         if recipient_id in seen:
             continue
         seen.add(recipient_id)
@@ -283,35 +304,176 @@ def _notify_case(db: Session, case: MissingPersonCase, young: YoungPerson, *, op
         )
 
 
+def _circle_recipients(db: Session, case: MissingPersonCase, young: YoungPerson) -> list[UUID]:
+    ids: list[UUID] = []
+    if young.user is not None and young.user.is_active:
+        ids.append(young.user_id)
+    links = (
+        db.query(GuardianLink)
+        .filter(
+            GuardianLink.young_person_id == young.id,
+            GuardianLink.status == GuardianLinkStatus.ACTIVE,
+            GuardianLink.can_receive_alerts.is_(True),
+        )
+        .all()
+    )
+    ids.extend(link.guardian_user_id for link in links)
+    ids.append(case.reported_by_user_id)
+    return ids
+
+
+def _notify_case(db: Session, case: MissingPersonCase, young: YoungPerson, *, opened: bool) -> None:
+    name = _subject_label(case, young)
+    title = "Nouveau avis de recherche" if opened else "Dossier mis à jour"
+    note_type = NotificationType.MISSING_CASE
+    if opened:
+        body = (
+            f"Avis de recherche déposé concernant {name}. "
+            "C'est une déclaration, pas un kidnapping confirmé. Un push FCM est tenté si un jeton appareil est enregistré."
+        )
+    elif case.status == CaseStatus.ACKNOWLEDGED:
+        title = "Avis pris en charge"
+        note_type = NotificationType.SEARCH_UPDATE
+        body = (
+            "L'avis est pris en charge. "
+            "Ce n'est pas un kidnapping confirmé. Un push FCM est tenté si un jeton appareil est enregistré."
+        )
+    elif case.status == CaseStatus.SEARCHING:
+        title = "Recherche lancée"
+        note_type = NotificationType.SEARCH_UPDATE
+        body = (
+            f"Une recherche a été lancée concernant {name}. "
+            "Aide à la décision, pas un kidnapping confirmé. Un push FCM est tenté si un jeton appareil est enregistré."
+        )
+    elif case.status == CaseStatus.INFO:
+        title = "Nouvelles informations"
+        note_type = NotificationType.SEARCH_UPDATE
+        body = (
+            f"Des informations ont été ajoutées au dossier concernant {name}. "
+            "Ce n'est pas un kidnapping confirmé."
+        )
+    elif case.status == CaseStatus.FOUND:
+        body = f"{name} a été marqué comme retrouvé. Ce n'était pas un kidnapping confirmé."
+    else:
+        body = f"Le dossier concernant {name} est clôturé."
+    recipients = _circle_recipients(db, case, young)
+    if opened:
+        recipients.extend(active_authority_ids(db))
+    _notify_recipients(db, case, recipients, title=title, body=body, note_type=note_type)
+
+
+def _create_subject_young(db: Session, reporter: User, payload: CaseCreate) -> YoungPerson:
+    """Fiche sujet sans compte login : jeune inactif, rattachement au déclarant. Pas Firestore."""
+    from uuid import uuid4
+
+    from app.core.security import hash_password
+
+    name = (payload.subject_name or "").strip()
+    if len(name) < 2:
+        raise CaseError("Indiquez le nom de la personne disparue", 422)
+    subject_user = User(
+        full_name=name[:120],
+        phone=f"+2370{uuid4().hex[:8]}",
+        password_hash=hash_password(uuid4().hex + "Aa1!"),
+        role=UserRole.YOUNG,
+        is_active=False,
+    )
+    db.add(subject_user)
+    db.flush()
+    notes_parts = []
+    if payload.subject_age_approx:
+        notes_parts.append(f"Âge : {payload.subject_age_approx}")
+    if payload.subject_sex:
+        notes_parts.append(f"Sexe : {payload.subject_sex}")
+    if payload.distinctive_signs:
+        notes_parts.append(payload.distinctive_signs)
+    young = YoungPerson(
+        user_id=subject_user.id,
+        display_name=name[:120],
+        notes=" · ".join(notes_parts) or None,
+        photo_url=payload.photo_url,
+    )
+    db.add(young)
+    db.flush()
+    relation = GuardianRelation.PARENT if reporter.role == UserRole.PARENT else GuardianRelation.RELATIVE
+    db.add(
+        GuardianLink(
+            guardian_user_id=reporter.id,
+            young_person_id=young.id,
+            relation=relation,
+            status=GuardianLinkStatus.ACTIVE,
+            can_view_location=False,
+            can_receive_alerts=True,
+            can_trigger_alert=False,
+            can_report_missing=True,
+            can_manage_zones=False,
+            can_manage_tracker=False,
+        )
+    )
+    db.flush()
+    return young
+
+
 def create_case(db: Session, user: User, payload: CaseCreate) -> MissingPersonCaseRead:
-    _can_report(db, user, payload.young_person_id)
-    existing = _open_case(db, payload.young_person_id)
-    if existing is not None:
-        return to_read(existing)
-    young = db.query(YoungPerson).filter(YoungPerson.id == payload.young_person_id).one_or_none()
-    if young is None:
-        raise CaseError("Jeune introuvable", 404)
+    if user.role not in {UserRole.PARENT, UserRole.RELATIVE}:
+        raise CaseError("Réservé au parent ou au proche autorisé", 403)
+    linked_id = payload.young_person_id
+    if linked_id is not None:
+        _can_report(db, user, linked_id)
+        existing = _open_case(db, linked_id)
+        if existing is not None:
+            return to_read(existing)
+        young = db.query(YoungPerson).filter(YoungPerson.id == linked_id).one_or_none()
+        if young is None:
+            raise CaseError("Jeune introuvable", 404)
+    else:
+        young = _create_subject_young(db, user, payload)
     snapshot = _build_snapshot(db, young)
     last = snapshot.get("last_known") or {}
     occurred = payload.occurred_at or _utcnow()
     occurred = _aware(occurred)
+    form_lat = payload.last_known_latitude
+    form_lng = payload.last_known_longitude
+    last_lat = form_lat if form_lat is not None else last.get("latitude")
+    last_lng = form_lng if form_lng is not None else last.get("longitude")
+    last_at = None
+    if form_lat is not None and form_lng is not None:
+        last_at = occurred
+        snapshot["last_known"] = {
+            "latitude": form_lat,
+            "longitude": form_lng,
+            "recorded_at": _iso(occurred),
+            "source": "NOTICE",
+            "address": payload.last_known_address,
+            "is_stale": True,
+        }
+    elif last.get("recorded_at"):
+        last_at = _aware(datetime.fromisoformat(last["recorded_at"]))
+    subject_name = (payload.subject_name or "").strip() or young.display_name
     case = MissingPersonCase(
         young_person_id=young.id,
         reported_by_user_id=user.id,
         occurred_at=occurred,
-        last_known_latitude=last.get("latitude"),
-        last_known_longitude=last.get("longitude"),
-        last_known_at=_aware(datetime.fromisoformat(last["recorded_at"])) if last.get("recorded_at") else None,
+        last_known_latitude=last_lat,
+        last_known_longitude=last_lng,
+        last_known_at=last_at,
         description=payload.description,
-        clothing=payload.clothing,
+        clothing=payload.clothing or payload.distinctive_signs,
         circumstances=payload.circumstances,
         last_seen_by=payload.last_seen_by,
+        photo_url=payload.photo_url,
+        subject_name=subject_name,
+        subject_age_approx=payload.subject_age_approx,
+        subject_sex=payload.subject_sex,
+        distinctive_signs=payload.distinctive_signs,
+        last_known_address=payload.last_known_address,
         snapshot_json=json.dumps(snapshot, ensure_ascii=False),
         status=CaseStatus.OPEN,
         priority=CasePriority.HIGH,
     )
     db.add(case)
     db.flush()
+    append_case_event(db, case, CaseStatus.OPEN, actor_id=user.id)
     _notify_case(db, case, young, opened=True)
     from app.services.intelligence_service import attach_analysis
 
@@ -349,14 +511,19 @@ def list_for_guardian(db: Session, user: User) -> list[MissingPersonCaseRead]:
         .filter(GuardianLink.guardian_user_id == user.id, GuardianLink.status == GuardianLinkStatus.ACTIVE)
         .all()
     ]
-    if not young_ids:
-        return []
-    rows = (
-        _query(db)
-        .filter(MissingPersonCase.young_person_id.in_(young_ids))
-        .order_by(MissingPersonCase.created_at.desc())
-        .all()
-    )
+    query = _query(db)
+    if young_ids:
+        from sqlalchemy import or_
+
+        query = query.filter(
+            or_(
+                MissingPersonCase.young_person_id.in_(young_ids),
+                MissingPersonCase.reported_by_user_id == user.id,
+            )
+        )
+    else:
+        query = query.filter(MissingPersonCase.reported_by_user_id == user.id)
+    rows = query.order_by(MissingPersonCase.created_at.desc()).all()
     return [to_read(row) for row in rows]
 
 
@@ -364,12 +531,63 @@ def get_case(db: Session, user: User, case_id: UUID) -> MissingPersonCaseRead:
     row = _query(db).filter(MissingPersonCase.id == case_id).one_or_none()
     if row is None:
         raise CaseError("Dossier introuvable", 404)
-    _can_view(db, user, row.young_person_id)
+    _can_view_case(db, user, row)
     return to_read(row)
 
 
+def list_events(db: Session, user: User, case_id: UUID) -> list[CaseEventRead]:
+    get_case(db, user, case_id)
+    rows = (
+        db.query(CaseEvent)
+        .filter(CaseEvent.case_id == case_id)
+        .order_by(CaseEvent.created_at.asc())
+        .all()
+    )
+    out: list[CaseEventRead] = []
+    for row in rows:
+        actor_name = None
+        if row.actor_user_id is not None:
+            actor = db.query(User).filter(User.id == row.actor_user_id).one_or_none()
+            actor_name = actor.full_name if actor is not None else None
+        payload = CaseEventRead.model_validate(row)
+        out.append(payload.model_copy(update={"actor_name": actor_name}))
+    return out
+
+
+def attach_photo(db: Session, user: User, case_id: UUID, upload) -> MissingPersonCaseRead:
+    from app.services.photo_service import PhotoError, delete_profile_photo_file, store_upload
+
+    row = _query(db).filter(MissingPersonCase.id == case_id).one_or_none()
+    if row is None:
+        raise CaseError("Dossier introuvable", 404)
+    if user.role == UserRole.AUTHORITY:
+        pass
+    elif user.id == row.reported_by_user_id:
+        pass
+    else:
+        _can_report(db, user, row.young_person_id)
+    try:
+        public = store_upload(upload, prefix=f"case_{case_id}")
+    except PhotoError as exc:
+        raise CaseError(exc.message, exc.status_code) from exc
+    previous = row.photo_url
+    row.photo_url = public
+    if row.young_person is not None:
+        row.young_person.photo_url = public
+    db.commit()
+    delete_profile_photo_file(previous if previous != public else None)
+    return to_read(_query(db).filter(MissingPersonCase.id == case_id).one())
+
+
 def set_status(db: Session, user: User, case_id: UUID, status: CaseStatus) -> MissingPersonCaseRead:
-    if status not in {CaseStatus.SEARCHING, CaseStatus.FOUND, CaseStatus.CLOSED}:
+    allowed = {
+        CaseStatus.ACKNOWLEDGED,
+        CaseStatus.SEARCHING,
+        CaseStatus.INFO,
+        CaseStatus.FOUND,
+        CaseStatus.CLOSED,
+    }
+    if status not in allowed:
         raise CaseError("Statut non autorisé", 422)
     row = _query(db).filter(MissingPersonCase.id == case_id).one_or_none()
     if row is None:
@@ -380,17 +598,30 @@ def set_status(db: Session, user: User, case_id: UUID, status: CaseStatus) -> Mi
             raise CaseError("Vous ne pouvez modifier que votre propre dossier", 403)
         if status != CaseStatus.FOUND:
             raise CaseError("Le jeune peut indiquer qu'il est en sécurité", 403)
-    elif user.role != UserRole.AUTHORITY:
+    elif user.role == UserRole.AUTHORITY:
+        pass
+    elif status == CaseStatus.ACKNOWLEDGED:
+        raise CaseError("Seul l’autorité peut prendre en charge un avis", 403)
+    else:
         _can_report(db, user, row.young_person_id)
     if row.status in TERMINAL_CASE and status != row.status:
         raise CaseError("Ce dossier est déjà clos", 409)
     if row.status == status:
         return to_read(row)
-    if status == CaseStatus.SEARCHING and row.status != CaseStatus.OPEN:
+    if status == CaseStatus.ACKNOWLEDGED and row.status != CaseStatus.OPEN:
+        raise CaseError("La prise en charge part d’un avis déposé", 409)
+    if status == CaseStatus.SEARCHING and row.status not in {
+        CaseStatus.OPEN,
+        CaseStatus.ACKNOWLEDGED,
+        CaseStatus.INFO,
+    }:
         raise CaseError("La recherche se lance depuis un dossier ouvert", 409)
+    if status == CaseStatus.INFO and row.status not in OPEN_CASE:
+        raise CaseError("Impossible d’ajouter des infos sur un dossier clos", 409)
     row.status = status
     db.flush()
-    if status in TERMINAL_CASE or status == CaseStatus.SEARCHING:
+    append_case_event(db, row, status, actor_id=user.id)
+    if status in TERMINAL_CASE or status in {CaseStatus.SEARCHING, CaseStatus.ACKNOWLEDGED, CaseStatus.INFO}:
         _notify_case(db, row, row.young_person, opened=False)
     db.commit()
     return to_read(_query(db).filter(MissingPersonCase.id == case_id).one())

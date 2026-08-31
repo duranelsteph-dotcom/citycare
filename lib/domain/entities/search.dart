@@ -18,6 +18,11 @@ class MissingPersonCase {
     this.circumstances,
     this.lastSeenBy,
     this.photoUrl,
+    this.subjectName,
+    this.subjectAgeApprox,
+    this.subjectSex,
+    this.distinctiveSigns,
+    this.lastKnownAddress,
     this.snapshot,
     this.youngDisplayName,
     this.reporterName,
@@ -35,6 +40,11 @@ class MissingPersonCase {
   final String? circumstances;
   final String? lastSeenBy;
   final String? photoUrl;
+  final String? subjectName;
+  final String? subjectAgeApprox;
+  final String? subjectSex;
+  final String? distinctiveSigns;
+  final String? lastKnownAddress;
   final Map<String, dynamic>? snapshot;
   final CaseStatus status;
   final CasePriority priority;
@@ -43,7 +53,18 @@ class MissingPersonCase {
   final String? youngDisplayName;
   final String? reporterName;
 
-  bool get isOpen => status == CaseStatus.open || status == CaseStatus.searching;
+  bool get isOpen =>
+      status == CaseStatus.open ||
+      status == CaseStatus.acknowledged ||
+      status == CaseStatus.searching ||
+      status == CaseStatus.info;
+
+  String get displayName =>
+      (youngDisplayName != null && youngDisplayName!.isNotEmpty)
+          ? youngDisplayName!
+          : (subjectName != null && subjectName!.isNotEmpty)
+              ? subjectName!
+              : 'Personne disparue';
 
   bool get lastKnownLooksStale {
     final lastKnown = snapshot?['last_known'];
@@ -68,6 +89,11 @@ class MissingPersonCase {
       circumstances: json['circumstances'] as String?,
       lastSeenBy: json['last_seen_by'] as String?,
       photoUrl: json['photo_url'] as String?,
+      subjectName: json['subject_name'] as String?,
+      subjectAgeApprox: json['subject_age_approx'] as String?,
+      subjectSex: json['subject_sex'] as String?,
+      distinctiveSigns: json['distinctive_signs'] as String?,
+      lastKnownAddress: json['last_known_address'] as String?,
       snapshot: rawSnapshot is Map ? Map<String, dynamic>.from(rawSnapshot) : null,
       status: CaseStatusApi.parse(json['status'] as String),
       priority: CasePriorityApi.parse(json['priority'] as String),
@@ -75,6 +101,38 @@ class MissingPersonCase {
       updatedAt: DateTime.parse(json['updated_at'] as String),
       youngDisplayName: json['young_display_name'] as String?,
       reporterName: json['reporter_name'] as String?,
+    );
+  }
+}
+
+class CaseEvent {
+  const CaseEvent({
+    required this.id,
+    required this.caseId,
+    required this.status,
+    required this.label,
+    required this.createdAt,
+    this.actorUserId,
+    this.actorName,
+  });
+
+  final String id;
+  final String caseId;
+  final CaseStatus status;
+  final String label;
+  final String? actorUserId;
+  final String? actorName;
+  final DateTime createdAt;
+
+  factory CaseEvent.fromJson(Map<String, dynamic> json) {
+    return CaseEvent(
+      id: json['id'] as String,
+      caseId: json['case_id'] as String,
+      status: CaseStatusApi.parse(json['status'] as String),
+      label: json['label'] as String,
+      actorUserId: json['actor_user_id'] as String?,
+      actorName: json['actor_name'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
 }

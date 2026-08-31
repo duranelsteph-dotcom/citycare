@@ -26,6 +26,7 @@
         android:label="CityCare"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:usesCleartextTraffic="true">
         <!-- Clé Google Maps injectée par Gradle depuis android/secrets.properties.
              Voir android/secrets.properties.example. Aucune clé n'est versionnée. -->

@@ -15,7 +15,7 @@ AUTHORITY = {"full_name": "Poste Demo", "phone": "+237699000004", "password": PA
 HOME = {"latitude": 3.8480, "longitude": 11.5021}
 SIGHT = {"latitude": 3.875, "longitude": 11.522}
 OPEN_SOS = {"CREATED", "ACTIVE", "ACKNOWLEDGED", "IN_PROGRESS"}
-OPEN_CASE = {"OPEN", "SEARCHING"}
+OPEN_CASE = {"OPEN", "ACKNOWLEDGED", "SEARCHING", "INFO"}
 KIT_FILE = Path(__file__).resolve().parent.parent / ".demo_kit.json"
 
 SCHOOL_ZONE = {

@@ -1,3 +1,4 @@
+import 'package:citycare/core/errors/api_exception.dart';
 import 'package:citycare/data/datasources/device_location_service.dart';
 import 'package:citycare/domain/entities/location_access.dart';
 import 'package:citycare/domain/entities/alerts.dart';
@@ -68,7 +69,7 @@ AuthController _amina() {
 }
 
 Widget _fabApp({
-  required _RecordingAlerts repo,
+  required AlertRepository repo,
   required AuthController auth,
   VoidCallback? onShortPress,
   Duration hold = const Duration(milliseconds: 80),
@@ -168,6 +169,30 @@ void main() {
     expect(repo.cancelledId, 'sos-hold');
     expect(find.textContaining('SOS annulé'), findsOneWidget);
   });
+
+  testWidgets('échec API : message réel, pas « indisponible pour le moment »', (tester) async {
+    final repo = _FailingAlerts();
+    await tester.pumpWidget(_fabApp(repo: repo, auth: _amina()));
+    await tester.pump();
+
+    await tester.startGesture(tester.getCenter(find.byKey(const Key('sos-fab'))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.textContaining('Serveur injoignable'), findsWidgets);
+    expect(find.textContaining('pour le moment'), findsNothing);
+    expect(find.text('Réessayer'), findsOneWidget);
+    expect(find.byKey(const Key('sos-cancel')), findsNothing);
+  });
+}
+
+class _FailingAlerts extends FakeAlertRepository {
+  @override
+  Future<Alert> triggerSos(SosDraft draft) async {
+    throw const ApiException('Serveur injoignable (Connection refused).', statusCode: 503);
+  }
 }
 
 class _InstantLocation extends DeviceLocationService {

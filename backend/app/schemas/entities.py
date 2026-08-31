@@ -236,6 +236,11 @@ class MissingPersonCaseRead(OrmModel):
     circumstances: str | None
     last_seen_by: str | None
     photo_url: str | None
+    subject_name: str | None = None
+    subject_age_approx: str | None = None
+    subject_sex: str | None = None
+    distinctive_signs: str | None = None
+    last_known_address: str | None = None
     snapshot: dict | None = None
     status: CaseStatus
     priority: CasePriority
@@ -243,6 +248,16 @@ class MissingPersonCaseRead(OrmModel):
     updated_at: datetime
     young_display_name: str | None = None
     reporter_name: str | None = None
+
+
+class CaseEventRead(OrmModel):
+    id: UUID
+    case_id: UUID
+    status: CaseStatus
+    label: str
+    actor_user_id: UUID | None = None
+    actor_name: str | None = None
+    created_at: datetime
 
 
 class TestimonyRead(OrmModel):
