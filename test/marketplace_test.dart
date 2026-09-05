@@ -24,16 +24,18 @@ void main() {
     final ok = await shop.recordOrder('kit-gps');
     expect(ok, isTrue);
     expect(shop.isOrdered('kit-gps'), isTrue);
-    expect(MarketplaceController.stubMessage, contains('Aucun paiement'));
+    expect(MarketplaceController.stubMessage, contains('Paiement démo'));
   });
 
   testWidgets('boutique : catalogue, Voir, Commander stub', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MarketplacePage()));
+    await tester.pumpWidget(
+      MaterialApp(home: MarketplacePage(controller: MarketplaceController.memory())),
+    );
     await tester.pump();
 
     expect(find.byKey(const Key('marketplace-page')), findsOneWidget);
     expect(find.text('Kits GPS et traceurs'), findsOneWidget);
-    expect(find.textContaining('aucun débit'), findsOneWidget);
+    expect(find.textContaining('Mobile Money réel'), findsOneWidget);
     expect(find.byKey(const Key('marketplace-card-kit-gps')), findsOneWidget);
     expect(find.textContaining('45 000 FCFA'), findsOneWidget);
     expect(find.textContaining('Play Store'), findsNothing);
@@ -45,10 +47,11 @@ void main() {
     expect(find.text('Commander'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('marketplace-commander-kit-gps')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('Déjà demandé'), findsOneWidget);
-    expect(find.textContaining('Aucun paiement'), findsWidgets);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('marketplace-confirm-demo-kit-gps')));
+    await tester.pumpAndSettle();
+    expect(find.text('Commande enregistrée'), findsOneWidget);
+    expect(find.textContaining('Paiement démo'), findsWidgets);
   });
 
   testWidgets('onglet Boutique visible depuis le shell', (tester) async {

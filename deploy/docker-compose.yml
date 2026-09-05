@@ -1,0 +1,73 @@
+# CityCare production — VPS
+# Usage sur le serveur :
+#   cp .env.example .env   # éditer DOMAIN, SECRET_KEY, mots de passe
+#   docker compose up -d --build
+#
+# Prérequis : DNS A du domaine → IP du VPS, ports 80/443 ouverts.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-citycare}
+      POSTGRES_USER: ${POSTGRES_USER:-citycare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définir POSTGRES_PASSWORD}
+    volumes:
+      - citycare_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-citycare} -d ${POSTGRES_DB:-citycare}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_NAME: CityCare
+      APP_ENV: production
+      API_V1_PREFIX: /api/v1
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-citycare}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-citycare}
+      SECRET_KEY: ${SECRET_KEY:?Définir SECRET_KEY (min 32 caractères)}
+      HTTPS_ONLY: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      UPLOAD_DIR: /app/static/uploads
+    volumes:
+      - citycare_uploads:/app/static/uploads
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Définir DOMAIN (ex. api.votredomaine.com)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  citycare_pg:
+  citycare_uploads:
+  caddy_data:
+  caddy_config:

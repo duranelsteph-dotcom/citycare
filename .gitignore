@@ -124,8 +124,12 @@ static/uploads/
 .env
 *.env
 !*.env.example
+!.env.example
+!deploy/.env.example
 .env.*
 !.env.example
+deploy/.env
+deploy/production.url
 android/secrets.properties
 ios/Flutter/Secrets.xcconfig
 android/app/google-services.json

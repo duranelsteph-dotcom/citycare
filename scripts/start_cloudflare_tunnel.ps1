@@ -54,9 +54,24 @@ const kTunnelApiUrl = '$apiUrl';
 "@
 
 Set-Content -Path $TunnelFile -Value $content -Encoding UTF8
+
+$UrlFile = Join-Path $Root "tunnel_url.txt"
+Set-Content -Path $UrlFile -Value $apiUrl -Encoding UTF8
+try {
+    Set-Clipboard -Value $apiUrl
+    $clipboardNote = "URL copiée dans le presse-papiers."
+} catch {
+    $clipboardNote = "Copiez l’URL ci-dessous dans CityCare > Configurer l’URL du serveur."
+}
+
 Write-Host ""
 Write-Host "=== Tunnel Cloudflare actif ===" -ForegroundColor Green
 Write-Host "URL publique : $publicUrl"
 Write-Host "URL API      : $apiUrl"
 Write-Host "Fichier      : $TunnelFile"
+Write-Host "Sauvegarde   : $UrlFile"
+Write-Host ""
+Write-Host ">>> Pas besoin de rebuild APK <<<" -ForegroundColor Yellow
+Write-Host "Sur le téléphone : CityCare > Configurer l'URL du serveur > coller > Tester"
+Write-Host $clipboardNote
 Write-Host ""

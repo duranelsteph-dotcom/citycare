@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/dev_api_host.dart';
+import '../../app/production_api_url.dart';
 import '../../app/tunnel_api_url.dart';
 import 'dev_api_resolver.dart';
 
@@ -25,6 +26,12 @@ class ApiConfig {
   /// Dernière URL qui a marché (rechargée au bootstrap).
   static String? rememberedUrl;
 
+  /// URL saisie manuellement (écran dev) — prioritaire après redémarrage PC.
+  static String? manualApiUrl;
+
+  /// Tests unitaires : ignore l’URL Render pour exercer les fallbacks LAN/USB.
+  static bool forceDevUrlsForTests = false;
+
   /// true = émulateur Android. null = pas encore interrogé.
   static bool? isEmulator;
 
@@ -33,12 +40,45 @@ class ApiConfig {
 
   static const Duration healthProbeTimeout = Duration(seconds: 2);
 
+  /// Réveil Render free (cold start) avant le premier POST /auth/login.
+  static const Duration productionHealthProbeTimeout = Duration(seconds: 90);
+
   static const String fromEnvironment = String.fromEnvironment('CITYCARE_API_URL');
+
+  /// URL HTTPS de production : dart-define, sinon constante compilée.
+  static String get productionApiUrl {
+    if (forceDevUrlsForTests && !kReleaseMode) {
+      return '';
+    }
+    final env = normalizeApiUrl(fromEnvironment);
+    if (env.isNotEmpty && isHttpsProductionUrl(env)) {
+      return env;
+    }
+    final baked = normalizeApiUrl(kProductionApiUrl);
+    if (baked.isNotEmpty && isHttpsProductionUrl(baked)) {
+      return baked;
+    }
+    // Release : toujours Render, jamais une URL vide (évite le fallback LAN).
+    if (kReleaseMode) {
+      return 'https://citycare-gp0y.onrender.com/api/v1';
+    }
+    return '';
+  }
+
+  static bool get isProductionBuild => kReleaseMode || productionApiUrl.isNotEmpty;
 
   static bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   /// Candidats stables (sans le cache) pour le retry.
   static List<String> get candidates {
+    final prod = productionApiUrl;
+    if (prod.isNotEmpty) {
+      return [prod];
+    }
+    // Release : aucun candidat LAN / USB / tunnel.
+    if (kReleaseMode) {
+      return const ['https://citycare-gp0y.onrender.com/api/v1'];
+    }
     return devApiUrlCandidates(
       fromEnv: fromEnvironment,
       isAndroid: _isAndroid,
@@ -47,12 +87,20 @@ class ApiConfig {
       lanApiUrl: kDevLanApiUrl,
       hotspotApiUrl: kDevHotspotApiUrl,
       tunnelApiUrl: kTunnelApiUrl,
+      manualApiUrl: manualApiUrl,
       remembered: rememberedUrl,
     );
   }
 
-  /// URL active : uniquement un health-check réussi ou le premier candidat (127.0.0.1).
+  /// URL active : en release = Render uniquement (jamais localhost / LAN / ngrok).
   static String get baseUrl {
+    final prod = productionApiUrl;
+    if (prod.isNotEmpty) {
+      return prod;
+    }
+    if (kReleaseMode) {
+      return 'https://citycare-gp0y.onrender.com/api/v1';
+    }
     if (currentOverride != null && currentOverride!.isNotEmpty) {
       return currentOverride!;
     }
@@ -89,8 +137,27 @@ class ApiConfig {
   /// Charge le cache + détecte l’émulateur. À appeler au démarrage.
   static Future<void> bootstrap() async {
     isEmulator = await detectAndroidEmulator();
+    final prod = productionApiUrl;
+    if (prod.isNotEmpty) {
+      currentOverride = prod;
+      rememberedUrl = null;
+      manualApiUrl = null;
+      // Efface d’anciennes URLs LAN/USB/ngrok mémorisées sur le téléphone.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(kWorkingApiUrlPrefKey);
+        await prefs.remove(kManualApiUrlPrefKey);
+      } catch (_) {}
+      // Réveille Render avant le login (évite Connection reset / timeout 12 s).
+      await _wakeProductionApi(prod);
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
+      final manual = prefs.getString(kManualApiUrlPrefKey);
+      if (manual != null && manual.isNotEmpty) {
+        manualApiUrl = normalizeApiUrl(manual);
+      }
       final saved = prefs.getString(kWorkingApiUrlPrefKey);
       if (saved != null && saved.isNotEmpty) {
         final normalized = normalizeApiUrl(saved);
@@ -108,16 +175,17 @@ class ApiConfig {
   }
 
   /// Health-check : reverse, LAN, hotspot seulement si /health répond.
+  /// En production : réveille Render (même URL, timeout long).
   static Future<void> selectReachableBaseUrl({http.Client? client}) async {
-    final tunnel = normalizeApiUrl(kTunnelApiUrl);
-    if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
-      if (await _healthOk(tunnel, client: client)) {
-        currentOverride = tunnel;
-        await persistWorking(tunnel);
-      }
+    final prod = productionApiUrl;
+    if (prod.isNotEmpty) {
+      currentOverride = prod;
+      await _wakeProductionApi(prod, client: client);
       return;
     }
-    if (isHttpsProductionUrl(fromEnvironment)) {
+    if (kReleaseMode) {
+      currentOverride = 'https://citycare-gp0y.onrender.com/api/v1';
+      await _wakeProductionApi(currentOverride!, client: client);
       return;
     }
     final urls = healthProbeCandidates(
@@ -128,6 +196,7 @@ class ApiConfig {
       lanApiUrl: kDevLanApiUrl,
       hotspotApiUrl: kDevHotspotApiUrl,
       tunnelApiUrl: kTunnelApiUrl,
+      manualApiUrl: manualApiUrl,
     );
     for (final url in urls) {
       if (await _healthOk(url, client: client)) {
@@ -157,7 +226,11 @@ class ApiConfig {
     }
   }
 
-  static Future<bool> _healthOk(String url, {http.Client? client}) async {
+  static Future<bool> _healthOk(
+    String url, {
+    http.Client? client,
+    Duration? timeout,
+  }) async {
     if (healthProbeOverride != null) {
       return healthProbeOverride!(url);
     }
@@ -168,7 +241,9 @@ class ApiConfig {
       final headers = isNgrokOrTunnelUrl(url)
           ? const {'ngrok-skip-browser-warning': 'true'}
           : const <String, String>{};
-      final response = await httpClient.get(uri, headers: headers).timeout(healthProbeTimeout);
+      final response = await httpClient
+          .get(uri, headers: headers)
+          .timeout(timeout ?? healthProbeTimeout);
       return response.statusCode >= 200 && response.statusCode < 300;
     } catch (_) {
       return false;
@@ -179,8 +254,29 @@ class ApiConfig {
     }
   }
 
+  /// Best-effort : GET /health avec timeout long (Render free cold start).
+  static Future<void> _wakeProductionApi(String url, {http.Client? client}) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (await _healthOk(
+        url,
+        client: client,
+        timeout: productionHealthProbeTimeout,
+      )) {
+        return;
+      }
+      await Future<void>.delayed(Duration(seconds: 2 * (attempt + 1)));
+    }
+  }
+
   /// Passe à l’URL suivante après un refus (127.0.0.1 sur le téléphone, etc.).
   static String? promoteNextAfterFailure() {
+    // Release / prod Render : jamais de bascule vers LAN, USB ou ngrok.
+    if (kReleaseMode || productionApiUrl.isNotEmpty) {
+      currentOverride = productionApiUrl.isNotEmpty
+          ? productionApiUrl
+          : 'https://citycare-gp0y.onrender.com/api/v1';
+      return null;
+    }
     final next = nextFallbackAfter(baseUrl, candidates);
     currentOverride = next;
     return next;
@@ -193,6 +289,38 @@ class ApiConfig {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(kWorkingApiUrlPrefKey);
     } catch (_) {}
+  }
+
+  /// Teste /health puis enregistre l’URL manuelle (sans rebuild APK).
+  static Future<bool> applyManualApiUrl(String raw) async {
+    var normalized = normalizeApiUrl(raw);
+    if (normalized.isEmpty) {
+      return false;
+    }
+    if (!normalized.endsWith('/api/v1')) {
+      normalized = '$normalized/api/v1';
+    }
+    if (!await _healthOk(normalized)) {
+      return false;
+    }
+    manualApiUrl = normalized;
+    currentOverride = normalized;
+    await persistWorking(normalized);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(kManualApiUrlPrefKey, normalized);
+    } catch (_) {}
+    return true;
+  }
+
+  static Future<void> clearManualApiUrl() async {
+    manualApiUrl = null;
+    await clearPersistedUrl();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(kManualApiUrlPrefKey);
+    } catch (_) {}
+    await selectReachableBaseUrl();
   }
 
   static Future<void> persistWorking(String url) async {
@@ -219,8 +347,10 @@ class ApiConfig {
   static void resetForTests() {
     currentOverride = null;
     rememberedUrl = null;
+    manualApiUrl = null;
     isEmulator = null;
     healthProbeOverride = null;
+    forceDevUrlsForTests = true;
   }
 }
 

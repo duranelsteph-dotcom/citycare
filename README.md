@@ -104,7 +104,27 @@ de tâche périodique iOS ; le flush reste au premier plan.
 
 ## URL du backend
 
-En **production** (HTTPS) :
+### Production cloud (Render + Supabase, gratuit soutenance)
+
+Voir `deploy/RENDER_SUPABASE.md`. Build APK :
+
+```powershell
+# deploy/production.url = https://VOTRE-SERVICE.onrender.com/api/v1
+.\scripts\build_release_apk.ps1
+```
+
+### Production VPS (Docker, option payante)
+
+Voir `deploy/README.md`. Build APK :
+
+```powershell
+# deploy/production.url = https://api.votredomaine.com/api/v1
+.\scripts\build_release_apk.ps1
+```
+
+L’APK release n’utilise **pas** USB, LAN ni Cloudflare.
+
+### Développement local
 
 ```bash
 flutter run --dart-define=CITYCARE_API_URL=https://exemple/api/v1
@@ -117,6 +137,7 @@ En **développement** sur un téléphone physique, ne pas utiliser `127.0.0.1`
 Émulateur Android : `http://10.0.2.2:8000/api/v1`. Backend : `python -m app.run_api`
 écoute `0.0.0.0:8000`. Autoriser TCP 8000 dans le pare-feu Windows.
 `adb reverse tcp:8000 tcp:8000` est un bonus USB, pas la solution définitive.
+`.\scripts\start_usb_dev.ps1` pour le mode USB local.
 
 ## Vérifications
 

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
+import '../dev/dev_api_settings_page.dart';
 import '../prevention/prevention_page.dart';
 import '../widgets/prevention_carousel.dart';
 import 'login_page.dart';
@@ -102,6 +104,19 @@ class _WelcomeActions extends StatelessWidget {
                 ),
                 child: const Text('Lire les conseils de prévention'),
               ),
+              if (kDebugMode)
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(builder: (_) => const DevApiSettingsPage()),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white54,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Configurer l’URL du serveur'),
+                ),
               Text(
                 'Connexion par téléphone, puis un code à usage unique.',
                 textAlign: TextAlign.center,

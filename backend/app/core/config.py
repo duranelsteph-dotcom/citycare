@@ -1,4 +1,21 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Supabase / Heroku donnent souvent postgres:// — SQLAlchemy 2 veut postgresql+psycopg."""
+    value = (url or "").strip()
+    if not value:
+        return value
+    if value.startswith("postgres://"):
+        value = "postgresql+psycopg://" + value[len("postgres://") :]
+    elif value.startswith("postgresql://") and "+psycopg://" not in value:
+        value = "postgresql+psycopg://" + value[len("postgresql://") :]
+    # Connexions cloud (Supabase) : SSL obligatoire.
+    if value.startswith("postgresql+psycopg://") and "sslmode=" not in value:
+        sep = "&" if "?" in value else "?"
+        value = f"{value}{sep}sslmode=require"
+    return value
 
 
 class Settings(BaseSettings):
@@ -37,6 +54,17 @@ class Settings(BaseSettings):
     # Photos de profil : disque local, pas Firebase. Relatif au dossier backend/ si non absolu.
     upload_dir: str = "static/uploads"
     upload_max_bytes: int = 2_097_152
+    # Soutenance Render : crée Marie/Amina/Marc/Poste si absents (motdepasse).
+    seed_demo_accounts: bool = True
+    # OTP visible dans la réponse JSON (aucun SMS). Utile sans APP_ENV=development.
+    allow_otp_dev: bool = True
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, value: object) -> object:
+        if isinstance(value, str):
+            return normalize_database_url(value)
+        return value
 
     @property
     def resolved_upload_dir(self):
@@ -91,9 +119,13 @@ class Settings(BaseSettings):
         return self.app_env.lower() in {"production", "prod"}
 
     @property
+    def otp_dev_enabled(self) -> bool:
+        """Code OTP / reset dans la réponse JSON (aucun canal SMS)."""
+        return (not self.is_production) or self.allow_otp_dev
+
+    @property
     def docs_enabled(self) -> bool:
         return not self.is_production
-
 
 
 settings = Settings()

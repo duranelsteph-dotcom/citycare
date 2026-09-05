@@ -1,0 +1,38 @@
+# Blueprint Render — CityCare API (gratuit / free tier)
+# Docs : https://render.com/docs/blueprint-spec
+#
+# Après connexion GitHub sur Render : New → Blueprint → ce dépôt.
+# Renseigner DATABASE_URL (Supabase) dans le dashboard.
+
+services:
+  - type: web
+    name: citycare-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./deploy/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_NAME
+        value: CityCare
+      - key: API_V1_PREFIX
+        value: /api/v1
+      - key: HTTPS_ONLY
+        value: "true"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: UPLOAD_DIR
+        value: /app/static/uploads
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: SEED_DEMO_ACCOUNTS
+        value: "true"
+      - key: ALLOW_OTP_DEV
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
+import '../dev/dev_api_settings_page.dart';
 import 'auth_modal_scaffold.dart';
 import 'auth_scope.dart';
 import 'forgot_password_page.dart';
@@ -115,6 +117,19 @@ class _PasswordPageState extends State<PasswordPage> {
                   auth.errorMessage!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
+                if (kDebugMode && auth.errorMessage!.toLowerCase().contains('injoignable')) ...[
+                  const SizedBox(height: CityCareBrand.spaceSm),
+                  TextButton(
+                    onPressed: auth.isBusy
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(builder: (_) => const DevApiSettingsPage()),
+                            );
+                          },
+                    child: const Text('Configurer l’URL du serveur'),
+                  ),
+                ],
               ],
               const SizedBox(height: CityCareBrand.spaceXl),
               FilledButton(

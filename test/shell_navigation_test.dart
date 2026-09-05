@@ -69,8 +69,9 @@ void main() {
     expect(find.byKey(const Key('toutes-fonctions-intro')), findsOneWidget);
     expect(find.textContaining('Catalogue groupé'), findsOneWidget);
     expect(find.textContaining('kidnapping confirmé'), findsWidgets);
-    expect(find.text('Alertes SOS'), findsWidgets);
     final menuScroll = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(find.text('Alertes SOS'), 240, scrollable: menuScroll);
+    expect(find.text('Alertes SOS'), findsWidgets);
     await tester.scrollUntilVisible(find.text('Créer un cercle'), 240, scrollable: menuScroll);
     expect(find.text('Rejoindre un cercle'), findsWidgets);
     await tester.scrollUntilVisible(find.text('Zones de sécurité'), 240, scrollable: menuScroll);

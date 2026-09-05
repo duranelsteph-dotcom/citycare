@@ -106,7 +106,7 @@ def test_delete_succeeds_invalidates_jwt_and_login() -> None:
 
 def test_delete_does_not_break_other_user_login() -> None:
     victim = _register(password="VilleCare1!")
-    neighbour = _register(password="autrepass1")
+    neighbour = _register(password="Autrepass1!")
     deleted = client.request(
         "DELETE",
         "/api/v1/auth/me",
@@ -117,7 +117,7 @@ def test_delete_does_not_break_other_user_login() -> None:
 
     challenge = client.post(
         "/api/v1/auth/login",
-        json={"phone": neighbour["_phone"], "password": "autrepass1"},
+        json={"phone": neighbour["_phone"], "password": "Autrepass1!"},
     )
     assert challenge.status_code == 200, challenge.text
     verified = client.post(

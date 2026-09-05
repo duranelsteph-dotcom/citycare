@@ -8,13 +8,34 @@ import '../../core/config/api_config.dart';
 import '../../core/config/dev_api_resolver.dart';
 import '../../core/errors/api_exception.dart';
 
+/// Timeout LAN / USB (réponse rapide attendue).
 const kHttpTimeout = Duration(seconds: 12);
+
+/// Render free : cold start 30–60 s + bcrypt login ~3 s.
+const kProductionHttpTimeout = Duration(seconds: 90);
+
+const int kProductionSameUrlRetries = 2;
 
 const offlineException = ApiException(
   'Hors ligne. Enregistrement local : l’heure du téléphone est conservée. '
   'Ce n’est pas Last Write Wins, pas un suivi en direct.',
   statusCode: 0,
 );
+
+Duration httpTimeoutFor(String apiUrl) {
+  if (isHttpsProductionUrl(apiUrl) || ApiConfig.productionApiUrl.isNotEmpty) {
+    return kProductionHttpTimeout;
+  }
+  return kHttpTimeout;
+}
+
+bool isTimeoutNetworkError(Object error) {
+  if (error is TimeoutException) {
+    return true;
+  }
+  final detail = error.toString().toLowerCase();
+  return detail.contains('timed out') || detail.contains('timeout');
+}
 
 /// En-têtes requis pour ngrok (plan gratuit) et autres tunnels HTTPS.
 Map<String, String> cityCareApiHeaders([Map<String, String>? extra]) {
@@ -39,6 +60,15 @@ ApiException connectionFailure(Object error) {
       isConnectionResetError(error) ||
       error is TimeoutException;
   if (usb) {
+    final prod = ApiConfig.productionApiUrl;
+    if (prod.isNotEmpty) {
+      return ApiException(
+        'Serveur injoignable ($detail). '
+        'Vérifiez Internet (4G/Wi‑Fi) et que l’API répond : $prod/health. '
+        'Sur Render free, la première requête peut prendre ~1 min (réveil).',
+        statusCode: 0,
+      );
+    }
     final hint = isConnectionResetError(error)
         ? 'Connexion coupée (IP Wi-Fi ou hotspot). Utilisez un tunnel ngrok : '
             'scripts/start_dev_tunnel.ps1 — ou USB + adb reverse tcp:8000 tcp:8000.'
@@ -63,18 +93,23 @@ ApiException connectionFailure(Object error) {
 
 /// Envoie [send] ; si 127.0.0.1 refuse, réessaie l’hôte LAN et mémorise.
 ///
+/// Sur HTTPS production (Render) : retente la **même** URL après reset / timeout
+/// (cold start), sans basculer vers LAN / USB / Cloudflare.
+///
 /// [send] doit reconstruire l’URI avec [ApiConfig.baseUrl] / [ApiConfig.uri]
 /// à chaque appel (pas une Uri figée avant le retry).
 Future<http.Response> guardedHttp(
   Future<http.Response> Function() send, {
-  Duration timeout = kHttpTimeout,
+  Duration? timeout,
 }) async {
   Object lastError = 'réseau';
   final tried = <String>{};
+  var productionAttempts = 0;
   while (true) {
     final used = ApiConfig.baseUrl;
+    final effectiveTimeout = timeout ?? httpTimeoutFor(used);
     try {
-      final response = await send().timeout(timeout);
+      final response = await send().timeout(effectiveTimeout);
       final host = hostOfApiUrl(used);
       if (host == null || !isWindowsHotspotHost(host)) {
         await ApiConfig.persistWorking(used);
@@ -89,6 +124,15 @@ Future<http.Response> guardedHttp(
     } on http.ClientException catch (error) {
       lastError = error;
     }
+
+    final productionHost = isHttpsProductionUrl(used);
+    final transient = isTransientNetworkError(lastError) || isTimeoutNetworkError(lastError);
+    if (productionHost && transient && productionAttempts < kProductionSameUrlRetries) {
+      productionAttempts++;
+      await Future<void>.delayed(Duration(seconds: 2 * productionAttempts));
+      continue;
+    }
+
     if (!shouldRetryAfterNetworkError(failedUrl: used, error: lastError)) {
       throw connectionFailure(lastError);
     }

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
@@ -33,6 +34,20 @@ from app.services.auth_service import (
 from app.services.photo_service import PhotoError, save_profile_photo
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/seed-demo")
+def seed_demo_accounts_route() -> dict[str, int | str]:
+    """Crée Marie/Amina/Marc/Poste si absents. Désactivé si SEED_DEMO_ACCOUNTS=false."""
+    if not settings.seed_demo_accounts:
+        raise HTTPException(status_code=404, detail="Seed démo désactivé")
+    from app.db.seed_demo import ensure_demo_accounts
+
+    try:
+        created = ensure_demo_accounts()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Seed impossible: {exc}") from exc
+    return {"created": created, "password_hint": "motdepasse"}
 
 
 @router.post("/register", response_model=TokenResponse)

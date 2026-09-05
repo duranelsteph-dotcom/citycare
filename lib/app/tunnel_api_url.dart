@@ -1,4 +1,4 @@
-﻿/// GÃ©nÃ©rÃ© par scripts/start_cloudflare_tunnel.ps1 â€” 2026-08-31 19:25
+﻿/// Généré par scripts/start_cloudflare_tunnel.ps1 — désactivé (API Render).
 library;
 
-const kTunnelApiUrl = 'https://folks-yorkshire-galaxy-founder.trycloudflare.com/api/v1';
+const kTunnelApiUrl = '';

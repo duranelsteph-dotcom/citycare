@@ -945,8 +945,8 @@ void main() {
 
     expect(find.byKey(const Key('auth-forgot-new-password')), findsOneWidget);
     expect(find.text('Nouveau mot de passe'), findsWidgets);
-    await tester.enterText(find.byKey(const Key('auth-forgot-new-password')), 'nouveaupass');
-    await tester.enterText(find.byKey(const Key('auth-forgot-confirm-password')), 'nouveaupass');
+    await tester.enterText(find.byKey(const Key('auth-forgot-new-password')), 'Nouveaupass1!');
+    await tester.enterText(find.byKey(const Key('auth-forgot-confirm-password')), 'Nouveaupass1!');
     await tester.ensureVisible(find.byKey(const Key('auth-forgot-submit')));
     await tester.tap(find.byKey(const Key('auth-forgot-submit')));
     await tester.pump();
@@ -954,7 +954,7 @@ void main() {
 
     expect(repo.lastResetPhone, '+237699000001');
     expect(repo.lastResetCode, '654321');
-    expect(repo.lastResetPassword, 'nouveaupass');
+    expect(repo.lastResetPassword, 'Nouveaupass1!');
     expect(find.textContaining('Mot de passe mis à jour'), findsWidgets);
   });
 
@@ -970,7 +970,7 @@ void main() {
     expect(find.text('+237', skipOffstage: false), findsOneWidget);
     expect(find.text('E-mail (facultatif)', skipOffstage: false), findsOneWidget);
     expect(find.textContaining('Conditions d’utilisation', skipOffstage: false), findsOneWidget);
-    expect(find.text('Mot de passe (8 caractères min.)', skipOffstage: false), findsOneWidget);
+    expect(find.text('Mot de passe fort', skipOffstage: false), findsOneWidget);
     expect(find.text('Life360'), findsNothing);
   });
 
@@ -1022,8 +1022,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('Toutes les fonctions'), findsWidgets);
     expect(find.text('Notifications'), findsWidgets);
-    expect(find.text('Alertes SOS'), findsWidgets);
     final menuScroll = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(find.text('Alertes SOS'), 240, scrollable: menuScroll);
+    expect(find.text('Alertes SOS'), findsWidgets);
     await tester.scrollUntilVisible(find.text('Zones de sécurité'), 240, scrollable: menuScroll);
     expect(find.text('Zones de sécurité'), findsOneWidget);
   });
@@ -1466,20 +1467,23 @@ void main() {
         'disclaimer': 'Ce n’est pas un kidnapping confirmé.',
       },
     );
+    final caseController = CaseController(_OpenCaseRepository(item))..current = item;
     await tester.pumpWidget(
       AuthScope(
         controller: auth,
         child: FamilyScope(
           controller: FamilyController(_OneChildFamily()),
           child: CaseScope(
-            controller: CaseController(_OpenCaseRepository(item)),
+            controller: caseController,
             child: const MaterialApp(home: CaseDetailPage(caseId: 'case-1')),
           ),
         ),
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 300));
+    final scroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text('Démarrer la recherche'), 200, scrollable: scroll);
 
     expect(find.text('Démarrer la recherche'), findsOneWidget);
     expect(find.textContaining('n’est pas un kidnapping confirmé'), findsWidgets);

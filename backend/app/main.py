@@ -23,6 +23,18 @@ async def lifespan(_: FastAPI):
     register_fcm_hooks()
     Base.metadata.create_all(bind=engine)
     ensure_schema(engine)
+    if settings.seed_demo_accounts and not settings.is_sqlite:
+        from app.db.seed_demo import ensure_demo_accounts
+
+        try:
+            ensure_demo_accounts()
+        except Exception:
+            # Ne pas bloquer /health si le seed échoue (pooler, droits, etc.).
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Seed démo ignoré — POST /api/v1/auth/seed-demo après correction DATABASE_URL"
+            )
     yield
 
 
@@ -80,11 +92,14 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.docs_enabled else None,
         openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
+    origins = settings.cors_origin_list
+    # Starlette interdit allow_origins=["*"] avec credentials=True.
+    star_all = origins == ["*"]
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_origin_regex=settings.cors_origin_regex,
-        allow_credentials=True,
+        allow_origins=["*"] if star_all else origins,
+        allow_origin_regex=None if star_all else settings.cors_origin_regex,
+        allow_credentials=not star_all,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept", "ngrok-skip-browser-warning"],
     )

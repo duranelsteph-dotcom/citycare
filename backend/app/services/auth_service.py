@@ -64,7 +64,7 @@ def _new_otp_code() -> str:
 
 
 def _dev_otp_enabled() -> bool:
-    return not settings.is_production
+    return settings.otp_dev_enabled
 
 
 def auth_user_from_model(user: User) -> AuthUserRead:

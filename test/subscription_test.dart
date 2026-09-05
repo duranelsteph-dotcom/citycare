@@ -38,7 +38,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('subscription-record')));
     await tester.pumpAndSettle();
-    expect(find.text('Déjà enregistré'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('subscription-confirm-demo')));
+    await tester.pumpAndSettle();
+    expect(find.text('Actif'), findsOneWidget);
   });
 
   test('contrôleur mémoire enregistre l’intention sans paiement', () async {
@@ -49,6 +51,6 @@ void main() {
     final ok = await billing.recordAnnualIntent();
     expect(ok, isTrue);
     expect(billing.current.isRecorded, isTrue);
-    expect(billing.current.message, contains('Aucun paiement'));
+    expect(billing.current.message, contains('Aucun paiement n’a été débité'));
   });
 }

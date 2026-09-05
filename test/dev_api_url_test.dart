@@ -80,6 +80,24 @@ void main() {
     expect(urls, [prod]);
   });
 
+  test('production HTTPS : timeout long et reset transient détecté', () {
+    expect(isHttpsProductionUrl('https://citycare-gp0y.onrender.com/api/v1'), isTrue);
+    expect(
+      isConnectionResetError(
+        'ClientException: Connection reset by peer, uri=https://citycare-gp0y.onrender.com/api/v1/auth/login',
+      ),
+      isTrue,
+    );
+    // Pas de bascule LAN : le retry même-URL est dans guardedHttp, pas ici.
+    expect(
+      shouldRetryAfterNetworkError(
+        failedUrl: 'https://citycare-gp0y.onrender.com/api/v1',
+        error: 'SocketException: Connection reset by peer',
+      ),
+      isFalse,
+    );
+  });
+
   test('retry : 127.0.0.1 refusÃ© -> LAN', () {
     final candidates = <String>[kLoopbackApiUrl, kDevLanApiUrl];
     expect(nextFallbackAfter(kLoopbackApiUrl, candidates), kDevLanApiUrl);
@@ -120,7 +138,7 @@ void main() {
     expect(urls.first, isNot(kDevHotspotApiUrl));
     expect(urls.first, kLoopbackApiUrl);
     expect(urls, contains(kDevLanApiUrl));
-    expect(urls.indexOf(kDevHotspotApiUrl), greaterThan(urls.indexOf(kDevLanApiUrl)));
+    expect(urls.indexOf(kDevLanApiUrl), lessThan(urls.indexOf(kDevHotspotApiUrl)));
   });
 
   test('health-check : reverse, puis LAN, hotspot seulement si OK', () {
@@ -147,6 +165,40 @@ void main() {
     expect(kDevLanHost, '10.5.50.210');
     expect(isPrivateLanHost(kDevLanHost), isTrue);
     expect(kDevLanApiUrl, 'http://$kDevLanHost:$kDevLanPort/api/v1');
+  });
+
+  test('URL manuelle dev prioritaire sur tunnel compile-time', () {
+    const manual = 'https://fresh-tunnel.trycloudflare.com/api/v1';
+    const stale = 'https://dead-tunnel.trycloudflare.com/api/v1';
+    final urls = devApiUrlCandidates(
+      fromEnv: '',
+      isAndroid: true,
+      isEmulator: false,
+      isWeb: false,
+      lanApiUrl: kDevLanApiUrl,
+      hotspotApiUrl: kDevHotspotApiUrl,
+      tunnelApiUrl: stale,
+      manualApiUrl: manual,
+    );
+    expect(urls.first, manual);
+  });
+
+  test('applyManualApiUrl enregistre après health OK', () async {
+    SharedPreferences.setMockInitialValues({});
+    const manual = 'https://live.trycloudflare.com/api/v1';
+    ApiConfig.healthProbeOverride = (url) async => url == manual;
+    final ok = await ApiConfig.applyManualApiUrl(manual);
+    expect(ok, isTrue);
+    expect(ApiConfig.manualApiUrl, manual);
+    expect(ApiConfig.baseUrl, manual);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kManualApiUrlPrefKey), manual);
+  });
+
+  test('ApiConfig rejette HTTP local comme URL de production', () {
+    expect(isHttpsProductionUrl('https://api.example.com/api/v1'), isTrue);
+    expect(isHttpsProductionUrl('http://127.0.0.1:8000/api/v1'), isFalse);
+    expect(isHttpsProductionUrl('http://10.5.50.210:8000/api/v1'), isFalse);
   });
 
   test('bootstrap invalide le cache 192.168.137.1 et choisit le LAN sain', () async {

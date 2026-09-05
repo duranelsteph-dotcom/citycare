@@ -10,6 +10,9 @@ const kLoopbackApiUrl = 'http://127.0.0.1:8000/api/v1';
 /// ClÃ© SharedPreferences : derniÃ¨re URL qui a rÃ©ellement rÃ©pondu.
 const kWorkingApiUrlPrefKey = 'citycare_working_api_url_v2';
 
+/// URL saisie manuellement (dev) : survit aux redÃ©marrages PC sans rebuild APK.
+const kManualApiUrlPrefKey = 'citycare_manual_api_url_v1';
+
 /// Adresse par dÃ©faut du partage de connexion Windows (Mobile Hotspot).
 const kWindowsHotspotHost = '192.168.137.1';
 
@@ -133,6 +136,9 @@ bool shouldRetryAfterNetworkError({
   if (host == null) {
     return true;
   }
+  if (isNgrokOrTunnelUrl(failedUrl)) {
+    return true;
+  }
   return isLoopbackHost(host) || isEmulatorOnlyHost(host) || isPrivateLanHost(host);
 }
 
@@ -202,6 +208,7 @@ List<String> healthProbeCandidates({
   required String lanApiUrl,
   String? hotspotApiUrl,
   String? tunnelApiUrl,
+  String? manualApiUrl,
   required bool isAndroid,
   required bool isEmulator,
   required bool isWeb,
@@ -212,10 +219,8 @@ List<String> healthProbeCandidates({
     return [env];
   }
 
+  final manual = normalizeApiUrl(manualApiUrl ?? '');
   final tunnel = normalizeApiUrl(tunnelApiUrl ?? '');
-  if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
-    return [tunnel];
-  }
 
   final out = <String>[];
   void add(String? url) {
@@ -227,6 +232,13 @@ List<String> healthProbeCandidates({
       return;
     }
     out.add(normalized);
+  }
+
+  if (manual.isNotEmpty) {
+    add(manual);
+  }
+  if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
+    add(tunnel);
   }
 
   if (isWeb) {
@@ -243,11 +255,11 @@ List<String> healthProbeCandidates({
   }
 
   add(kLoopbackApiUrl);
-  add(hotspotApiUrl);
   if (_usableLanOverride(env, isWeb: false, isEmulator: false)) {
     add(env);
   }
   add(lanApiUrl);
+  add(hotspotApiUrl);
   return out;
 }
 
@@ -260,6 +272,7 @@ List<String> devApiUrlCandidates({
   required String lanApiUrl,
   String? hotspotApiUrl,
   String? tunnelApiUrl,
+  String? manualApiUrl,
   String? remembered,
 }) {
   final env = normalizeApiUrl(fromEnv);
@@ -267,10 +280,8 @@ List<String> devApiUrlCandidates({
     return [env];
   }
 
+  final manual = normalizeApiUrl(manualApiUrl ?? '');
   final tunnel = normalizeApiUrl(tunnelApiUrl ?? '');
-  if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
-    return [tunnel];
-  }
 
   final out = <String>[];
   void add(String? url) {
@@ -282,6 +293,13 @@ List<String> devApiUrlCandidates({
       return;
     }
     out.add(normalized);
+  }
+
+  if (manual.isNotEmpty) {
+    add(manual);
+  }
+  if (tunnel.isNotEmpty && isHttpsProductionUrl(tunnel)) {
+    add(tunnel);
   }
 
   if (isWeb) {
@@ -310,9 +328,8 @@ List<String> devApiUrlCandidates({
     return out;
   }
 
-  // Téléphone physique : tunnel ngrok, adb reverse, hotspot Windows, puis Wi-Fi PC.
+  // Téléphone physique : tunnel (si actif), adb reverse, LAN, hotspot en dernier.
   add(kLoopbackApiUrl);
-  add(hotspotApiUrl);
   if (_usableLanOverride(env, isWeb: false, isEmulator: false)) {
     add(env);
   }
@@ -320,6 +337,7 @@ List<String> devApiUrlCandidates({
   if (_usableRemembered(remembered, isWeb: false, isEmulator: false)) {
     add(remembered);
   }
+  add(hotspotApiUrl);
   if (isAndroid) {
     add(kAndroidEmulatorApiUrl);
   }
